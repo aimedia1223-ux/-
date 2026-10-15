@@ -1,0 +1,201 @@
+/* =========================================
+   Modern Job Card UI
+========================================= */
+.job-card-modern {
+  background: white;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid transparent;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  position: relative;
+  cursor: pointer;
+  animation: fadeIn 0.4s ease;
+  overflow: hidden;
+}
+
+.job-card-modern:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+  border-color: var(--primary);
+}
+
+.job-card-urgent {
+  border: 2px solid #FCA5A5;
+}
+
+.job-card-urgent:hover {
+  border-color: #EF4444;
+}
+
+.job-card-urgent-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: #DC2626;
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.04em;
+  padding: 5px 14px;
+  /* カードの padding を打ち消して上部フルワイドの帯にする */
+  margin: -14px -14px 12px -14px;
+}
+
+.job-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.job-title-row h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-main);
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+.job-fav-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  margin: -2px -2px 0 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.job-meta-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+}
+
+.job-meta-company {
+  font-weight: bold;
+  color: var(--text-main);
+}
+
+.job-meta-area {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.job-meta-area .material-symbols-outlined {
+  font-size: 13px;
+  color: #EF4444;
+}
+
+.job-trade-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #D1FAE5;
+  color: #065F46;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 9px;
+}
+
+.job-trade-badge .material-symbols-outlined {
+  font-size: 11px;
+}
+
+.job-tags-container {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.modern-tag {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.tag-carrier {
+  color: #4F46E5;
+  background: #EEF2FF;
+  border-color: #C7D2FE;
+}
+
+.tag-channel {
+  color: #D97706;
+  background: #FFFBEB;
+  border-color: #FDE68A;
+}
+
+.tag-role {
+  color: #059669;
+  background: #ECFDF5;
+  border-color: #A7F3D0;
+}
+
+.tag-location {
+  color: #4B5563;
+  background: #F3F4F6;
+  border-color: #D1D5DB;
+}
+
+.job-stat-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.job-stat-when {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-sub);
+  font-weight: 600;
+  min-width: 0;
+}
+
+.job-stat-when .material-symbols-outlined {
+  font-size: 13px;
+  color: #2563EB;
+}
+
+.job-deadline-pill {
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.job-price-inline {
+  display: flex;
+  align-items: baseline;
+  flex-shrink: 0;
+}
+
+.job-price {
+  font-size: 15px;
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.job-price-unit {
+  font-size: 11px;
+  color: var(--text-sub);
+  font-weight: 500;
+}

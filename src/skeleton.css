@@ -1,0 +1,14 @@
+/* =========================================
+   Skeleton Loaders
+========================================= */
+.skeleton {
+  background: linear-gradient(90deg, var(--border-color) 25%, var(--bg-gray) 50%, var(--border-color) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 8px;
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

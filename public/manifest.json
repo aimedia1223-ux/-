@@ -1,0 +1,17 @@
+{
+  "short_name": "connexy",
+  "name": "connexy - 通信業界BtoBマッチング",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "./",
+  "background_color": "#0F172A",
+  "theme_color": "#2563EB",
+  "display": "standalone",
+  "orientation": "portrait"
+}
