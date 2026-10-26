@@ -75,7 +75,7 @@ test('未登録・未検証のセッションでは所属RPCを呼ばず追加�
 test('保存済みの未検証セッションも追加認証が必要', async () => {
   const {api,calls}=setup({identity:approved,aal:'aal1',factors:[{id:'factor1',friendly_name:'Test'}]});
   await assert.rejects(api.getAuthenticatedUser(), e=>e instanceof api.MfaRequiredError && e.account.factors[0].id==='factor1');
-  assert.equal(calls.length,0);
+  assert.deepEqual(calls,['connexy_mfa_is_required']);
 });
 test('追加認証の確認が通信障害なら所属RPCを実行しない', async () => {
   const {api,calls}=setup({identity:approved,mfaError:new Error('mfa unavailable')});
@@ -83,13 +83,15 @@ test('追加認証の確認が通信障害なら所属RPCを実行しない', as
   assert.deepEqual(calls.slice(1),['signOut']);
 });
 
-test('開発時にサーバーが明示的に省略を許可した本人だけ所属を取得する',async()=>{
- const {api,calls}=setup({identity:approved,dev:true,aal:'aal1',mfaRequired:false});
+test('公開版もサーバーが明示的に省略を許可した本人だけ所属を取得する',async()=>{
+ for(const dev of [true,false]){
+ const {api,calls}=setup({identity:approved,dev,aal:'aal1',mfaRequired:false});
  assert.equal((await api.getAuthenticatedUser()).id,'company-a');
  assert.deepEqual(calls,['connexy_mfa_is_required','connexy_current_identity']);
+ }
 });
-test('本番・例外なし・取得エラー・形式不正では追加認証を維持する',async()=>{
- for(const options of [{dev:false,mfaRequired:false},{dev:true,mfaRequired:true},{dev:true,mfaRequired:false,policyError:{code:'ERROR'}},{dev:true,mfaRequired:null}]){
+test('公開版も例外なし・取得エラー・形式不正では追加認証を維持する',async()=>{
+ for(const options of [{dev:false,mfaRequired:true},{dev:true,mfaRequired:true},{dev:false,mfaRequired:false,policyError:{code:'ERROR'}},{dev:false,mfaRequired:null}]){
   const {api,calls}=setup({identity:approved,aal:'aal1',...options});
   await assert.rejects(api.getAuthenticatedUser(),api.MfaRequiredError);
   assert.equal(calls.includes('connexy_current_identity'),false);
