@@ -1,3 +1,15 @@
+import { AssignedJobsPanel } from '../components/AssignedJobsPanel';
+import { SbApprovalPanel } from '../components/SbApprovalPanel';
+import { ContractConfirmationPanel } from '../components/ContractConfirmationPanel';
+import { JobResponsibilityPanel } from '../components/JobResponsibilityPanel';
+import { AgencyManagerPanel } from '../components/AgencyManagerPanel';
+import { ResponsibleCommunicationPanel } from '../components/ResponsibleCommunicationPanel';
+import { AuditLogPanel } from '../components/AuditLogPanel';
+import { StaffCsvExport } from '../components/StaffCsvExport';
+import { DeletionRecordPanel } from '../components/DeletionRecordPanel';
+import { requireSbApproval } from '../lib/sbApprovalGateway';
+import { loadManagementSections, managementErrorCode } from '../utils/loadManagementSections';
+import { legacyDemoAuth } from '../lib/auth';
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
@@ -78,6 +90,9 @@ export function ManagementPage() {
   const [allJobsList, setAllJobsList] = useState<Job[]>([]);
   const [allStaffs, setAllStaffs] = useState<Staff[]>([]);
   const [allCompanies, setAllCompanies] = useState<User[]>([]);
+  const [jobsLoadState, setJobsLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [staffLoadState, setStaffLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [staffLoadCode, setStaffLoadCode] = useState('');
 
   const pastTradeCompanyIds = useMemo(() => {
     if (!currentUser || !tasks) return new Set<string>();
@@ -97,7 +112,7 @@ export function ManagementPage() {
 
   // Tab/Subpage state
   const isUserAdmin = !currentUser?.staffId || currentUser.staffRole === 'admin';
-  const [subPage, setSubPage] = useState<'none' | 'posts' | 'staffs' | 'reports' | 'logs' | 'training' | 'analytics' | 'applications'>('none');
+  const [subPage, setSubPage] = useState<'none' | 'posts' | 'staffs' | 'reports' | 'logs' | 'training' | 'analytics' | 'applications' | 'assigned_jobs' | 'sb_approval' | 'contract_confirmation' | 'job_responsibilities' | 'agency_managers' | 'responsible_communications' | 'audit_log' | 'deletion_records'>('none');
 
   // プロフィール充実度
   const profileCompletion = useMemo(() => {
@@ -234,22 +249,40 @@ export function ManagementPage() {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
 
   const loadData = async () => {
-    const user = await api.getCurrentUser();
-    setCurrentUser(user);
-    const fetchedTasks = await api.getContractTasks();
-    setTasks(fetchedTasks);
-    const fetchedTrainings = await api.getTrainings();
-    setTrainings(fetchedTrainings);
-    const fetchedJobs = await api.getJobs();
-    setAllJobsList(fetchedJobs);
-    const fetchedUsers = await api.getUsers();
-    setAllCompanies(fetchedUsers);
-    if (user) {
-      const fetchedStaffs = await api.getStaffsByUserId(user.id);
-      setAllStaffs(fetchedStaffs);
-      if (fetchedStaffs.length > 0 && !selectedHistoryStaffId) {
-        setSelectedHistoryStaffId(fetchedStaffs[0].id);
+    setJobsLoadState('loading');
+    setAllJobsList([]);
+    setStaffLoadState('loading');
+    setStaffLoadCode('');
+    setAllStaffs([]);
+    try {
+      const user = await api.getCurrentUser();
+      setCurrentUser(user);
+      if (!user) {
+        setStaffLoadState('error');
+        setStaffLoadCode('AUTH_REQUIRED');
+        setJobsLoadState('error');
+        return;
       }
+      const result = await loadManagementSections(api, user.id);
+      setTasks(result.tasks.status === 'fulfilled' ? result.tasks.value : []);
+      setTrainings(result.trainings.status === 'fulfilled' ? result.trainings.value : []);
+      setAllJobsList(result.jobs.status === 'fulfilled' ? result.jobs.value : []);
+      setJobsLoadState(result.jobs.status === 'fulfilled' ? 'ready' : 'error');
+      setAllCompanies(result.companies.status === 'fulfilled' ? result.companies.value : []);
+      if (result.staffs.status === 'fulfilled') {
+        setAllStaffs(result.staffs.value);
+        setStaffLoadState('ready');
+        if (result.staffs.value.length > 0 && !selectedHistoryStaffId) {
+          setSelectedHistoryStaffId(result.staffs.value[0].id);
+        }
+      } else {
+        setStaffLoadState('error');
+        setStaffLoadCode(managementErrorCode(result.staffs.reason));
+      }
+    } catch (error) {
+      setJobsLoadState('error');
+      setStaffLoadState('error');
+      setStaffLoadCode(managementErrorCode(error));
     }
   };
 
@@ -706,7 +739,7 @@ export function ManagementPage() {
     const activeScreeningJob = myJobs.find(j => j.id === screeningJobId);
     if (!activeScreeningJob) return;
 
-    const needsSbApproval = requiresSbSubcontractApproval(activeScreeningJob);
+    const needsSbApproval = legacyDemoAuth && requiresSbSubcontractApproval(activeScreeningJob);
     if (needsSbApproval && (!sbApprovalNumber.trim() || !sbApprovedOn || !sbOriginalConfirmed)) {
       alert('SB再委託承諾書の管理番号・承諾日を入力し、原本確認にチェックしてください。');
       return;
@@ -718,6 +751,7 @@ export function ManagementPage() {
 
     setIsContractSaving(true);
     try {
+      if (!legacyDemoAuth) await requireSbApproval(activeScreeningJob.id, confirmingCandidate.company.id, confirmingCandidate.staff.id);
       const channelId = confirmingCandidate.chatTask?.id || `chat_${[currentUser?.id || '', confirmingCandidate.company.id].sort().join('_')}`;
       const existingMessages = (confirmingCandidate.chatTask?.evaluations as any)?.messages || [];
       
@@ -1052,6 +1086,7 @@ export function ManagementPage() {
   };
 
   const handleDownloadCSV = (logs: ParsedAttendanceLog[], staffName: string) => {
+    if (!legacyDemoAuth) { alert('出勤履歴CSVは正式なデータ取得と監査に対応するまで利用できません。'); return; }
     if (logs.length === 0) {
       alert("ダウンロードできる出勤データがありません。");
       return;
@@ -1146,6 +1181,7 @@ export function ManagementPage() {
   };
 
   const handleDownloadInvoice = (task: ContractTask) => {
+    if (!legacyDemoAuth) { alert('請求書PDFは正式な帳票と監査に対応するまで利用できません。'); return; }
     try {
       const doc = new jsPDF();
       doc.setFontSize(20);
@@ -1175,6 +1211,7 @@ export function ManagementPage() {
 
   // 一括CSVダウンロード機能
   const handleBulkExportCSV = () => {
+    if (!legacyDemoAuth) { alert('取引CSVは正式な契約取得と監査に対応するまで利用できません。'); return; }
     try {
       const headers = ['契約ID', 'クライアントID', 'ワーカーID', '案件名', '金額(円)', 'ステータス', '実施日'];
       const rows = relatedTasks.map((t: ContractTask) => [
@@ -1211,6 +1248,7 @@ export function ManagementPage() {
 
   // iCalendar (.ics) カレンダー同期出力機能
   const handleExportICS = (task: ContractTask) => {
+    if (!legacyDemoAuth) { alert('予定ファイルは正式な契約取得と監査に対応するまで利用できません。'); return; }
     try {
       const title = task.jobTitle || 'CONNEXY契約案件';
       
@@ -1325,6 +1363,13 @@ export function ManagementPage() {
 
   // Dashboard Menu selector
   const menuItems = isUserAdmin ? [
+    ...(!legacyDemoAuth ? [{ id: 'deletion_records', label: '削除実施記録', desc: '削除ログと返還・外部保存・バックアップ等の確認状況', icon: 'fact_check', bg: '#FFF7ED', color: '#B45309' }] : []),
+    ...(!legacyDemoAuth ? [{ id: 'audit_log', label: '監査ログ', desc: '対象操作の閲覧・変更・送信・削除の記録', icon: 'history_edu', bg: '#F5F3FF', color: '#7C3AED' }] : []),
+    ...(!legacyDemoAuth ? [{ id: 'responsible_communications', label: '責任者間の業務連絡', desc: '一次窓口と二次管理責任者だけの連絡', icon: 'forum', bg: '#EFF6FF', color: '#1D4ED8' }] : []),
+    ...(!legacyDemoAuth ? [{ id: 'agency_managers', label: '二次委託先の管理責任者', desc: '保存済み一覧・双方の窓口・業務連絡の経路', icon: 'account_tree', bg: '#EFF6FF', color: '#1D4ED8' }] : []),
+    ...(!legacyDemoAuth ? [{ id: 'job_responsibilities', label: '案件責任者', desc: '保存済み一覧・SBや二次委託先との窓口・事故対応責任者', icon: 'supervisor_account', bg: '#ECFDF5', color: '#047857' }] : []),
+    ...(!legacyDemoAuth ? [{ id: 'contract_confirmation', label: '契約手続き', desc: '契約条件の提示・当事者の確認・契約確定', icon: 'description', bg: '#EFF6FF', color: '#1D4ED8' }] : []),
+    ...(!legacyDemoAuth ? [{ id: 'sb_approval', label: 'SB再委託承諾', desc: '原本照合記録と案件・二次委託先・スタッフの一致を確認', icon: 'verified_user', bg: '#FFF7ED', color: '#9A3412' }] : []),
     { id: 'posts', label: '案件管理', desc: '掲載案件の管理・アサイン選考、他社スタッフの出勤予定', icon: 'campaign', bg: '#FEF3C7', color: '#D97706' },
     { id: 'applications', label: '応募状況・履歴', desc: '他社案件へ応募した進捗・内定の確認・履歴管理', icon: 'list_alt', bg: '#E0F2FE', color: '#0284C7' },
     { id: 'staffs', label: 'スタッフ管理', desc: 'メンバー登録、アカウント追加、権限管理', icon: 'groups', bg: '#ECFDF5', color: '#059669' },
@@ -1332,6 +1377,7 @@ export function ManagementPage() {
     { id: 'logs', label: '出勤管理', desc: '自社スタッフの出勤予定カレンダーと打刻履歴', icon: 'history', bg: '#EFF6FF', color: '#1D4ED8' },
     { id: 'analytics', label: '分析・ダッシュボード', desc: '自社の取引実績、完了率、対応履歴の可視化', icon: 'analytics', bg: '#F3E8FF', color: '#7E22CE' },
   ] : [
+    { id: 'assigned_jobs', label: '担当案件', desc: '自分に共有された担当案件の確認', icon: 'assignment', bg: '#FEF3C7', color: '#D97706' },
     { id: 'applications', label: '応募状況・履歴', desc: '自身が応募した案件・マッチング状態の確認・履歴', icon: 'list_alt', bg: '#E0F2FE', color: '#0284C7' },
     { id: 'training', label: '研修・クイズ', desc: '動画視聴と理解度テストの受講（準備中 / Coming Soon）', icon: 'school', bg: '#F1F5F9', color: '#94A3B8', disabled: true },
     { id: 'reports', label: '報告・評価', desc: '完了した業務の評価と元請けへの評価送信', icon: 'rate_review', bg: '#FDF2F8', color: '#DB2777' },
@@ -1494,8 +1540,33 @@ export function ManagementPage() {
       </div>
 
       {/* 2. Slide-In Overlays for Subpages */}
+      {currentUser && isUserAdmin && subPage === 'deletion_records' && !legacyDemoAuth && (
+        <DeletionRecordPanel onBack={() => setSubPage('none')} />
+      )}
+      {currentUser && isUserAdmin && subPage === 'audit_log' && !legacyDemoAuth && (
+        <AuditLogPanel onBack={() => setSubPage('none')} />
+      )}
+      {currentUser && isUserAdmin && subPage === 'responsible_communications' && !legacyDemoAuth && (
+        <ResponsibleCommunicationPanel onBack={() => setSubPage('none')} />
+      )}
+      {currentUser && isUserAdmin && subPage === 'agency_managers' && !legacyDemoAuth && (
+        <AgencyManagerPanel onBack={() => setSubPage('none')} />
+      )}
+      {currentUser && isUserAdmin && subPage === 'job_responsibilities' && !legacyDemoAuth && (
+        <JobResponsibilityPanel jobs={myJobs} jobsState={jobsLoadState} onBack={() => setSubPage('none')} />
+      )}
+      {currentUser && isUserAdmin && subPage === 'contract_confirmation' && !legacyDemoAuth && (
+        <ContractConfirmationPanel jobs={myJobs} user={currentUser} onBack={() => setSubPage('none')} />
+      )}
+      {currentUser && isUserAdmin && subPage === 'sb_approval' && !legacyDemoAuth && (
+        <SbApprovalPanel jobs={myJobs} onBack={() => setSubPage('none')} />
+      )}
 
 
+
+      {currentUser && !isUserAdmin && subPage === 'assigned_jobs' && (
+        <AssignedJobsPanel jobs={myJobs} state={jobsLoadState} onBack={() => setSubPage('none')} onReload={() => void loadData()} />
+      )}
 
       {/* (B) Posts Overlay */}
       {isUserAdmin && (
@@ -1661,10 +1732,23 @@ export function ManagementPage() {
                 </button>
               </div>
 
+              {!legacyDemoAuth && subPage === 'staffs' && currentUser?.staffRole === 'admin' && <StaffCsvExport />}
               <h3 className="section-title" style={{ marginTop: 0, marginBottom: '12px', fontSize: '14px' }}>
-                登録スタッフ一覧 ({companyStaffs.length}名)
+                {staffLoadState === 'loading' ? 'スタッフを読み込み中…' : staffLoadState === 'error' ? 'スタッフ一覧を取得できませんでした' : `登録スタッフ一覧 (${companyStaffs.length}名)`}
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {staffLoadState === 'error' && (
+                  <div role="alert" style={{ padding: '16px', color: '#92400e', background: '#fffbeb', borderRadius: '8px' }}>
+                    スタッフの読み込みに失敗しました。接続または閲覧権限をご確認ください。（確認コード: {staffLoadCode}）
+                    <button onClick={() => void loadData()} style={{ display: 'block', marginTop: '10px' }}>再読み込み</button>
+                  </div>
+                )}
+                {staffLoadState === 'ready' && companyStaffs.length === 0 && (
+                  <div style={{ padding: '16px', color: 'var(--text-sub)' }}>
+                    閲覧できるスタッフがありません。登録済みの場合は、所属会社と閲覧ルールを確認してください。
+                    <button onClick={() => void loadData()} style={{ display: 'block', marginTop: '10px' }}>再読み込み</button>
+                  </div>
+                )}
                 {companyStaffs.map(s => (
                   <div key={s.id} style={{ background: 'var(--surface-color)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
@@ -1681,7 +1765,7 @@ export function ManagementPage() {
                       <div style={{ fontSize: '11px', color: 'var(--text-sub)', marginTop: '4px' }}>
                         拠点: {s.baseLocation} / スキル: {s.skills.join(', ')}
                       </div>
-                      {s.loginId && (
+                      {legacyDemoAuth && s.loginId && (
                         <div style={{ fontSize: '10px', color: '#64748B', marginTop: '4px', background: '#F8FAFC', padding: '2px 6px', borderRadius: '4px', display: 'inline-block' }}>
                           ID: <strong>{s.loginId}</strong> / PW: <strong>{s.password}</strong>
                         </div>
@@ -2483,7 +2567,8 @@ export function ManagementPage() {
               <div><strong>条件単価:</strong> ¥{myJobs.find(j => j.id === screeningJobId)?.price.toLocaleString()} / 日</div>
             </div>
 
-            {requiresSbSubcontractApproval(myJobs.find(j => j.id === screeningJobId)) && (
+            {!legacyDemoAuth && <p role="note">SBの承諾はサーバーの原本照合記録から確認します。承諾番号やチェックだけでオファーは送信できません。</p>}
+            {legacyDemoAuth && requiresSbSubcontractApproval(myJobs.find(j => j.id === screeningJobId)) && (
               <div style={{ background: '#FFF7ED', padding: '14px', borderRadius: '10px', border: '1px solid #FDBA74', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: '#9A3412', fontWeight: 'bold', fontSize: '13px' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>gpp_maybe</span>
@@ -2517,7 +2602,7 @@ export function ManagementPage() {
               <button type="button" onClick={() => setShowOrderConfirmModal(false)} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', background: 'var(--surface-color)', color: '#475569', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
                 キャンセル
               </button>
-              <button type="button" onClick={handleConfirmOrderSubmit} disabled={isContractSaving || (requiresSbSubcontractApproval(myJobs.find(j => j.id === screeningJobId)) && (!sbApprovalNumber.trim() || !sbApprovedOn || !sbOriginalConfirmed))} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: isContractSaving || (requiresSbSubcontractApproval(myJobs.find(j => j.id === screeningJobId)) && (!sbApprovalNumber.trim() || !sbApprovedOn || !sbOriginalConfirmed)) ? '#CBD5E1' : 'var(--primary)', color: 'white', fontSize: '12px', fontWeight: 'bold', cursor: isContractSaving ? 'wait' : 'pointer' }}>
+              <button type="button" onClick={handleConfirmOrderSubmit} disabled={isContractSaving || (legacyDemoAuth && requiresSbSubcontractApproval(myJobs.find(j => j.id === screeningJobId)) && (!sbApprovalNumber.trim() || !sbApprovedOn || !sbOriginalConfirmed))} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: isContractSaving || (legacyDemoAuth && requiresSbSubcontractApproval(myJobs.find(j => j.id === screeningJobId)) && (!sbApprovalNumber.trim() || !sbApprovedOn || !sbOriginalConfirmed)) ? '#CBD5E1' : 'var(--primary)', color: 'white', fontSize: '12px', fontWeight: 'bold', cursor: isContractSaving ? 'wait' : 'pointer' }}>
                 {isContractSaving ? '送信中...' : 'オファーを送信'}
               </button>
             </div>
@@ -2599,6 +2684,7 @@ export function ManagementPage() {
           </header>
           <main className="list-area bg-gray" style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: '90px' }}>
             <form onSubmit={handleStaffSave} style={{ background: 'var(--surface-color)', padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px', border: '1px solid var(--border-color)' }}>
+              {legacyDemoAuth && (
               <div style={{ display: 'flex', gap: '10px' }}>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '12px', fontWeight: 'bold' }}>ログインID *</label>
@@ -2609,6 +2695,7 @@ export function ManagementPage() {
                   <input type="password" required value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)' }} />
                 </div>
               </div>
+              )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 'bold' }}>氏名（フルネーム） *</label>
@@ -2672,6 +2759,7 @@ export function ManagementPage() {
           </header>
           <main className="list-area bg-gray" style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: '90px' }}>
             <form onSubmit={handleStaffUpdate} style={{ background: 'var(--surface-color)', padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px', border: '1px solid var(--border-color)' }}>
+              {legacyDemoAuth && (
               <div style={{ display: 'flex', gap: '10px' }}>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '12px', fontWeight: 'bold' }}>ログインID *</label>
@@ -2682,6 +2770,7 @@ export function ManagementPage() {
                   <input type="password" required value={editFormData.password} onChange={e => setEditFormData({ ...editFormData, password: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)' }} />
                 </div>
               </div>
+              )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 'bold' }}>氏名（フルネーム） *</label>

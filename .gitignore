@@ -11,6 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
+auth-verification.local.json
+supabase/101_first_demo_membership.sql
+
+# Local verification screenshots, generated documents and chat handoff notes
+/tmp/
+/output/
+/RESUME_NOTES.md
 
 # Environment variables
 .env

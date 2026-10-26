@@ -7,7 +7,21 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:auth": "node --test auth.test.cjs password-recovery.test.cjs session-activity.test.cjs session-limits.test.cjs mfa-rls.test.cjs mfa-access-probe.test.cjs",
+    "test:access": "node --test data-access.test.cjs rls.test.cjs management-loader.test.cjs",
+    "test:sb": "node --test sb-gate.test.cjs sb-verification.test.cjs",
+    "test:contracts": "node --test contract-confirmation.test.cjs contract-gateway.test.cjs contract-flow-verification.test.cjs browser-contract-fixture.test.cjs contract-documents.test.cjs",
+    "test:disclosure": "node --test job-disclosure.test.cjs job-disclosure-gateway.test.cjs browser-disclosure-fixture.test.cjs",
+    "test:responsibilities": "node --test job-responsibilities.test.cjs job-responsibilities-gateway.test.cjs responsibility-list.test.cjs",
+    "test:agency-managers": "node --test agency-managers.test.cjs agency-managers-gateway.test.cjs browser-agency-manager-fixture.test.cjs",
+    "test:communications": "node --test responsible-communications.test.cjs responsible-communications-gateway.test.cjs",
+    "test:audit": "node --test audit-log.test.cjs audit-log-gateway.test.cjs",
+    "test:audited-reads": "node --test audited-reads.test.cjs audited-reads-gateway.test.cjs data-access.test.cjs",
+    "test:deletion-records": "node --test deletion-records.test.cjs deletion-records-gateway.test.cjs",
+    "test:contract-pdf": "node --test contract-pdf.test.cjs contract-documents.test.cjs contract-gateway.test.cjs",
+    "verify:auth:config": "node scripts/verify-auth.mjs --check",
+    "verify:auth": "node scripts/verify-auth.mjs"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.1.0",
@@ -22,6 +36,7 @@
     "react-router-dom": "^7.15.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
     "@eslint/js": "^10.0.1",
     "@types/google.maps": "^3.65.1",
     "@types/node": "^24.12.3",

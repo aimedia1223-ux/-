@@ -1,4 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { legacyDemoAuth } from '../lib/auth';
+import { ResponsibleCommunicationPanel } from '../components/ResponsibleCommunicationPanel';
+import { useNavigate } from 'react-router-dom';
+import { requireSbApproval } from '../lib/sbApprovalGateway';
 import { api, subscribeToContractTaskChanges } from '../data/mockDb';
 import { getEngagementStatusLabel } from '../utils/statusLabels';
 import { getOpponentCompanyName } from '../utils/chatParties';
@@ -68,6 +72,11 @@ const photoOptions = [
 
 
 export function MessagePage() {
+  const navigate = useNavigate();
+  return legacyDemoAuth ? <LegacyMessagePage /> : <ResponsibleCommunicationPanel onBack={() => navigate('/manage')} />;
+}
+
+function LegacyMessagePage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
@@ -644,6 +653,8 @@ export function MessagePage() {
   }, [currentUser, relatedJob, relatedTask]);
 
   const sbApprovalGate = useMemo(() => {
+    if (!legacyDemoAuth) return { required: true, valid: false, record: undefined,
+      reason: '契約確定は「管理 → 契約手続き」を利用してください。このチャットからの確定・現場グループ作成は停止中です。' };
     if (!requiresSbSubcontractApproval(relatedJob)) {
       return { required: false, valid: true, record: undefined, reason: undefined };
     }
@@ -1167,7 +1178,9 @@ export function MessagePage() {
       const staffId = getJobStaffId(task.evaluations, jobId);
       const staff = allStaffs.find(s => s.id === staffId);
 
-      if (requiresSbSubcontractApproval(job)) {
+      if (!legacyDemoAuth) {
+        await requireSbApproval(job.id, task.agency_id || currentUser.id, staffId || '');
+      } else if (requiresSbSubcontractApproval(job)) {
         const approval = getSbSubcontractApproval(task, job.id);
         const approvalCheck = validateSbSubcontractApproval(approval, {
           agencyId: task.agency_id || currentUser.id,
@@ -1185,6 +1198,7 @@ export function MessagePage() {
       const clientComp = allCompanies.find(c => c.id === job.authorId);
       // 1. Create a ContractTask for the actual job assignment (status = 'confirmed')
       const newContractTask = {
+        sbStaffId: staffId,
         id: `ct_${Date.now()}`,
         jobId: job.id,
         jobTitle: job.title,

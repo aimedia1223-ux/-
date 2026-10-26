@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { legacyDemoAuth } from '../lib/auth';
 import { api } from '../data/mockDb';
 import type { User } from '../data/mockDb';
 
@@ -57,6 +58,10 @@ export function SettingsDrawer({ isOpen, onClose, onLogoutSuccess }: SettingsDra
   };
 
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!legacyDemoAuth) {
+      alert('契約書の保存機能を準備中です。現在はアップロードできません。');
+      return;
+    }
     const file = e.target.files?.[0];
     if (file) {
       if (file.type !== 'application/pdf') {
@@ -81,6 +86,10 @@ export function SettingsDrawer({ isOpen, onClose, onLogoutSuccess }: SettingsDra
   };
 
   const handleProfileSave = () => {
+    if (!legacyDemoAuth) {
+      alert('会社情報の保存機能を準備中です。現在の入力は保存されません。');
+      return;
+    }
     setProfileSaving(true);
     if (currentUser) {
       localStorage.setItem('company_rep_' + currentUser.id, repNameInput);

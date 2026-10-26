@@ -13,6 +13,8 @@ import { getLinkedJobIds } from '../utils/jobStates';
 import { PREFECTURE_REGIONS, ALL_PREFECTURES, getCityArea, matchesPrefectureFilter } from '../utils/prefectures';
 import Autocomplete from 'react-google-autocomplete';
 import { useSessionState } from '../hooks/useSessionState';
+import { legacyDemoAuth } from '../lib/auth';
+import { PublicJobCatalog } from '../components/PublicJobCatalog';
 
 // 「3年以上」「5年」「未経験」などの自由記述から経験年数(概算)を取り出す。
 export const parseExperienceYears = (exp?: string | null): number => {
@@ -41,6 +43,7 @@ export const getStaffGender = (name: string): '男性' | '女性' => {
 };
 
 export function SearchPage() {
+  const [showPublicCatalog, setShowPublicCatalog] = useState(false);
   const navigate = useNavigate();
   const mapRef = useRef<any>(null);
   const clustererRef = useRef<any>(null);
@@ -1841,6 +1844,12 @@ export function SearchPage() {
 
   return (
     <div className="view active" style={{ display: 'flex', flexDirection: 'column' }}>
+      {showPublicCatalog && <PublicJobCatalog onBack={() => setShowPublicCatalog(false)} />}
+      {!legacyDemoAuth && !isSelectingLocationOnMap && mode === 'job' && <button
+        onClick={() => setShowPublicCatalog(true)}
+        style={{padding:12,border:0,background:'#eff6ff',color:'#0755bd',fontWeight:700}}>
+        他社案件の公開概要を見る
+      </button>}
       {isSelectingLocationOnMap && (
         <div style={{
           position: 'fixed',

@@ -1,3 +1,7 @@
+import { readColumns } from './readColumns';
+import { readAuditedRows } from '../lib/auditedReads';
+import { requireSbApproval } from '../lib/sbApprovalGateway';
+import { legacyDemoAuth, getAuthenticatedUser, loginWithAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { encryptData, decryptData } from '../lib/crypto';
 import { regionalJobs } from './regionalJobs';
@@ -151,6 +155,8 @@ export interface Staff {
 
 // 契約タスク(ContractTask)の型定義
 export interface ContractTask {
+  sbStaffId?: string;
+  sbApprovalId?: string;
   id: string;
   jobId: string;
   jobTitle: string;
@@ -431,9 +437,10 @@ const unmapTalent = (talent: Partial<Talent>): any => {
 };
 
 const mapStaff = (row: any): Staff => {
-  const localRole = localStorage.getItem('staff_role_' + row.id) as 'admin' | 'staff' | null;
-  const localLogin = localStorage.getItem('staff_login_' + row.id);
-  const localPassword = localStorage.getItem('staff_password_' + row.id);
+  const localRole = legacyDemoAuth ? localStorage.getItem('staff_role_' + row.id) : null;
+  const demoRole = localRole as 'admin' | 'staff' | null;
+  const localLogin = legacyDemoAuth ? localStorage.getItem('staff_login_' + row.id) : null;
+  const localPassword = legacyDemoAuth ? localStorage.getItem('staff_password_' + row.id) : null;
 
   const completedTrainings = row.completed_trainings || [];
   let furigana = '';
@@ -474,9 +481,9 @@ const mapStaff = (row: any): Staff => {
     prText: row.pr_text,
     completedTrainings,
     hasCertificate: row.has_certificate,
-    role: localRole || row.role || 'staff',
-    loginId: localLogin || row.login_id || '',
-    password: decryptData(localPassword || row.password) || '',
+    role: legacyDemoAuth ? (demoRole || row.role || 'staff') : 'staff',
+    loginId: legacyDemoAuth ? (localLogin || row.login_id || '') : undefined,
+    password: legacyDemoAuth ? (decryptData(localPassword || row.password) || '') : undefined,
     furigana,
     commuteMethod,
     gender,
@@ -504,10 +511,13 @@ const unmapStaff = (staff: Partial<Staff>): any => {
   delete row.gender;
   delete row.birthday;
 
+  if (!legacyDemoAuth) { delete row.role; delete row.login_id; delete row.password; }
   return row;
 };
 
 const mapContractTask = (row: any): ContractTask => ({
+  sbStaffId: row.sb_staff_id,
+  sbApprovalId: row.sb_approval_id,
   id: row.id,
   jobId: row.job_id,
   jobTitle: row.job_title,
@@ -533,6 +543,8 @@ const mapContractTask = (row: any): ContractTask => ({
 
 const unmapContractTask = (task: Partial<ContractTask>): any => {
   const row: any = { ...task };
+  if ('sbStaffId' in task) { row.sb_staff_id = task.sbStaffId; delete row.sbStaffId; }
+  if ('sbApprovalId' in task) { row.sb_approval_id = task.sbApprovalId; delete row.sbApprovalId; }
   if ('jobId' in task) { row.job_id = task.jobId; delete row.jobId; }
   if ('jobTitle' in task) { row.job_title = task.jobTitle; delete row.jobTitle; }
   if ('workerName' in task) { row.worker_name = task.workerName; delete row.workerName; }
@@ -555,6 +567,11 @@ let useOfflineMock = false;
 
 /** ローカルDBが書き換わったことを通知するイベント名(同一タブ向け)。cross-tab は 'storage' イベントで拾う。 */
 export const DATA_CHANGED_EVENT = 'connexy:data-changed';
+export const DATA_ACCESS_ERROR_EVENT = 'connexy:data-access-error';
+
+function notifyDataAccessError() {
+  try { window.dispatchEvent(new Event(DATA_ACCESS_ERROR_EVENT)); } catch { /* 非ブラウザのテスト環境 */ }
+}
 
 /**
  * チャットメッセージのマージ。呼び出し側の `next` を正とし(既存メッセージの編集を保持)、
@@ -575,7 +592,7 @@ const mergeChatMessages = (existing: any[] | undefined, next: any[]): any[] => {
 };
 
 // Attempt to detect if running in an offline or sandboxed environment
-if (typeof window !== 'undefined') {
+if (legacyDemoAuth && typeof window !== 'undefined') {
   if (localStorage.getItem('connexy_is_offline') === 'true' || !navigator.onLine) {
     useOfflineMock = true;
   }
@@ -584,7 +601,7 @@ if (typeof window !== 'undefined') {
 // 自己回復: 一度でも Supabase 呼び出しに失敗すると `connexy_is_offline` が永続化され、
 // リロードしてもオフラインモードのまま(= 別アカウント間でデータが同期されない)。
 // オンラインに戻っている場合、起動時に軽い疎通確認をして成功したらフラグを解除する。
-if (typeof window !== 'undefined' && navigator.onLine && localStorage.getItem('connexy_is_offline') === 'true') {
+if (legacyDemoAuth && typeof window !== 'undefined' && navigator.onLine && localStorage.getItem('connexy_is_offline') === 'true') {
   (async () => {
     try {
       const { error } = await supabase.from('companies').select('id').limit(1);
@@ -602,7 +619,7 @@ if (typeof window !== 'undefined' && navigator.onLine && localStorage.getItem('c
 
 // 一度きりのデータ移行: 保存値 `working` → `confirmed`(STATUS_MODEL.md §7.1)。
 // 読み出しは mapContractTask で正規化するが、保存済みデータも揃えておく。
-if (typeof window !== 'undefined' && localStorage.getItem('connexy_migrated_working_to_confirmed') !== '1') {
+if (legacyDemoAuth && typeof window !== 'undefined' && localStorage.getItem('connexy_migrated_working_to_confirmed') !== '1') {
   try {
     const rawTasks = localStorage.getItem('offline_db_contract_tasks');
     if (rawTasks) {
@@ -629,6 +646,7 @@ if (typeof window !== 'undefined' && localStorage.getItem('connexy_migrated_work
 
 // Persisted localStorage helpers
 const getOfflineData = (table: string, defaultData: any[]): any[] => {
+  if (!legacyDemoAuth) throw new Error('個人認証ではブラウザ保存の業務データを読み出せません。');
   if (typeof window === 'undefined') return defaultData;
   const data = localStorage.getItem('offline_db_' + table);
   if (data) {
@@ -670,6 +688,7 @@ const getOfflineData = (table: string, defaultData: any[]): any[] => {
 };
 
 const saveOfflineData = (table: string, data: any[]) => {
+  if (!legacyDemoAuth) throw new Error('個人認証では業務データをブラウザに代替保存できません。');
   if (typeof window !== 'undefined') {
     localStorage.setItem('offline_db_' + table, JSON.stringify(data));
     try {
@@ -689,6 +708,7 @@ const saveOfflineData = (table: string, data: any[]) => {
  * 返り値の関数を呼ぶと購読解除。
  */
 export function subscribeToContractTaskChanges(onChange: () => void): () => void {
+  if (!legacyDemoAuth) return () => {}; // 新認証の専用画面は再取得を明示し、旧チャットの定期取得を起動しない。
   if (typeof window === 'undefined') return () => {};
 
   const handleLocal = () => onChange();
@@ -742,6 +762,10 @@ export function subscribeToContractTaskChanges(onChange: () => void): () => void
 // 次回リロードで再度 Supabase を試せるようにする(永続オフラインで別アカウント間の
 // データ同期が止まる事故を防ぐ)。回復用フラグは起動時の疎通確認でも解除される。
 async function callSupabase<T>(apiFn: () => Promise<T>, fallbackFn: () => T | Promise<T>): Promise<T> {
+  if (!legacyDemoAuth) {
+    try { return await apiFn(); }
+    catch (error) { notifyDataAccessError(); throw error; }
+  }
   if (useOfflineMock) {
     return await fallbackFn();
   }
@@ -758,6 +782,13 @@ async function callSupabase<T>(apiFn: () => Promise<T>, fallbackFn: () => T | Pr
 }
 
 const mapUser = (row: any): User => {
+  if (!legacyDemoAuth) return {
+    id: row.id, name: row.name, role: row.role, status: row.status,
+    invoiceNumber: row.invoice_number, representativeName: row.representative_name,
+    email: row.email, website: row.website, address: row.address, prText: row.pr_text,
+    companyType: row.company_type, gender: row.gender,
+    contractTemplate: row.contract_template, contractPdf: row.contract_pdf,
+  };
   const localStatus = localStorage.getItem('company_status_' + row.id) as 'pending' | 'approved' | 'rejected' | null;
   const localInvoice = localStorage.getItem('company_invoice_' + row.id);
   const localRep = localStorage.getItem('company_rep_' + row.id);
@@ -888,6 +919,7 @@ const mapUser = (row: any): User => {
 };
 
 const initializeDefaultStaffLogins = (allStaffsData: any[]) => {
+  if (!legacyDemoAuth) return;
   const companyGroups: { [key: string]: any[] } = {};
   allStaffsData.forEach((row: any) => {
     if (!companyGroups[row.user_id]) companyGroups[row.user_id] = [];
@@ -1070,9 +1102,10 @@ const defaultOfflineAnnouncements = [
 
 export const api = {
   getJobs: async (limit?: number, offset?: number): Promise<Job[]> => {
+    if (!legacyDemoAuth) return (await readAuditedRows('jobs', {limit,offset})).map(mapJob);
     return callSupabase(
       async () => {
-        let query = supabase.from('jobs').select('*');
+        let query = supabase.from('jobs').select(legacyDemoAuth ? '*' : readColumns.jobs);
         if (typeof limit === 'number' && typeof offset === 'number') {
           query = query.range(offset, offset + limit - 1);
         }
@@ -1091,9 +1124,10 @@ export const api = {
   },
 
   getTalents: async (limit?: number, offset?: number): Promise<Talent[]> => {
+    if (!legacyDemoAuth) return (await readAuditedRows('talents', {limit,offset})).map(mapTalent);
     return callSupabase(
       async () => {
-        let query = supabase.from('talents').select('*');
+        let query = supabase.from('talents').select(legacyDemoAuth ? '*' : readColumns.talents);
         if (typeof limit === 'number' && typeof offset === 'number') {
           query = query.range(offset, offset + limit - 1);
         }
@@ -1112,9 +1146,10 @@ export const api = {
   },
 
   getUserById: async (id: string): Promise<User | undefined> => {
+    if (!legacyDemoAuth) { const rows = await readAuditedRows('companies', {id}); return rows[0] ? mapUser(rows[0]) : undefined; }
     return callSupabase(
       async () => {
-        const { data, error } = await supabase.from('companies').select('*').eq('id', id).single();
+        const { data, error } = await supabase.from('companies').select(legacyDemoAuth ? '*' : readColumns.companies).eq('id', id).single();
         if (error || !data) return undefined;
         return mapUser(data);
       },
@@ -1127,18 +1162,19 @@ export const api = {
   },
 
   getCurrentUser: async (): Promise<User | null> => {
+    if (!legacyDemoAuth) return getAuthenticatedUser();
     const userId = localStorage.getItem('connexy_current_user_id');
     if (!userId) return null;
 
     return callSupabase(
       async () => {
-        const { data, error } = await supabase.from('companies').select('*').eq('id', userId).single();
+        const { data, error } = await supabase.from('companies').select(legacyDemoAuth ? '*' : readColumns.companies).eq('id', userId).single();
         if (error || !data) return null;
         
         const companyUser = mapUser(data);
         const staffId = localStorage.getItem('connexy_current_staff_id');
         if (staffId) {
-          const { data: staffData } = await supabase.from('staffs').select('*').eq('id', staffId).single();
+          const { data: staffData } = await supabase.from('staffs').select(legacyDemoAuth ? '*' : readColumns.staffs).eq('id', staffId).single();
           if (staffData) {
             const staff = mapStaff(staffData);
             companyUser.staffId = staff.id;
@@ -1177,6 +1213,7 @@ export const api = {
   },
 
   login: async (loginId: string, password: string): Promise<User | null> => {
+    if (!legacyDemoAuth) return loginWithAuth(loginId, password);
     return callSupabase(
       async () => {
         // 1. Try to authenticate against companies table
@@ -1194,7 +1231,7 @@ export const api = {
         }
         
         // 2. Try to authenticate against staffs table
-        const { data: allStaffsData } = await supabase.from('staffs').select('*');
+        const { data: allStaffsData } = await supabase.from('staffs').select(legacyDemoAuth ? '*' : readColumns.staffs);
         if (allStaffsData) {
           initializeDefaultStaffLogins(allStaffsData);
           for (const sRow of allStaffsData) {
@@ -1203,7 +1240,7 @@ export const api = {
               localStorage.setItem('connexy_current_user_id', staff.userId);
               localStorage.setItem('connexy_current_staff_id', staff.id);
               
-              const { data: companyData2 } = await supabase.from('companies').select('*').eq('id', staff.userId).single();
+              const { data: companyData2 } = await supabase.from('companies').select(legacyDemoAuth ? '*' : readColumns.companies).eq('id', staff.userId).single();
               if (companyData2) {
                 const user = mapUser(companyData2);
                 user.staffId = staff.id;
@@ -1249,19 +1286,24 @@ export const api = {
   },
 
   logout: async (): Promise<void> => {
+    if (!legacyDemoAuth) {
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) throw error;
+    }
     localStorage.removeItem('connexy_current_user_id');
     localStorage.removeItem('connexy_current_staff_id');
   },
 
   getStaffsByUserId: async (userId: string): Promise<Staff[]> => {
+    if (!legacyDemoAuth) return (await readAuditedRows('staffs', {company:userId})).map(mapStaff);
     return callSupabase(
       async () => {
-        const { data, error } = await supabase.from('staffs').select('*').eq('user_id', userId);
+        const { data, error } = await supabase.from('staffs').select(legacyDemoAuth ? '*' : readColumns.staffs).eq('user_id', userId);
         if (error) throw error;
         
-        const { data: allStaffsData } = await supabase.from('staffs').select('*');
-        if (allStaffsData) {
-          initializeDefaultStaffLogins(allStaffsData);
+        if (legacyDemoAuth) {
+          const { data: allStaffsData } = await supabase.from('staffs').select('*');
+          if (allStaffsData) initializeDefaultStaffLogins(allStaffsData);
         }
         return data.map(mapStaff);
       },
@@ -1274,9 +1316,10 @@ export const api = {
   },
 
   getAllStaffs: async (): Promise<Staff[]> => {
+    if (!legacyDemoAuth) return (await readAuditedRows('staffs')).map(mapStaff);
     return callSupabase(
       async () => {
-        const { data, error } = await supabase.from('staffs').select('*');
+        const { data, error } = await supabase.from('staffs').select(legacyDemoAuth ? '*' : readColumns.staffs);
         if (error) throw error;
         if (data) {
           initializeDefaultStaffLogins(data);
@@ -1364,13 +1407,13 @@ export const api = {
     if (staff.birthday) extraTags.push('STAFF_BIRTHDAY_' + staff.birthday);
 
     const newStaff = { ...staff, id, completedTrainings: extraTags };
-    if (newStaff.role) {
+    if (legacyDemoAuth && newStaff.role) {
       localStorage.setItem('staff_role_' + id, newStaff.role);
     }
-    if (newStaff.loginId) {
+    if (legacyDemoAuth && newStaff.loginId) {
       localStorage.setItem('staff_login_' + id, newStaff.loginId);
     }
-    if (newStaff.password) {
+    if (legacyDemoAuth && newStaff.password) {
       localStorage.setItem('staff_password_' + id, newStaff.password);
     }
 
@@ -1407,17 +1450,19 @@ export const api = {
   // ※ 補助的な機能なので callSupabase は使わない。`announcements` テーブルが無い等で
   //   失敗してもアプリ全体をオフラインモードに落とさず、ローカル/既定データを返す。
   getAnnouncements: async (): Promise<Announcement[]> => {
+    if (!legacyDemoAuth) return (await readAuditedRows('announcements')).map(mapAnnouncement).sort((a,b)=>b.date.localeCompare(a.date));
     const localList = () =>
       [...getOfflineData('announcements', defaultOfflineAnnouncements).map(mapAnnouncement)]
         .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
-    if (useOfflineMock) return localList();
+    if (legacyDemoAuth && useOfflineMock) return localList();
     try {
-      const { data, error } = await supabase.from('announcements').select('*').order('date', { ascending: false });
+      const { data, error } = await supabase.from('announcements').select(legacyDemoAuth ? '*' : readColumns.announcements).order('date', { ascending: false });
       if (error) throw error;
-      if (!data || data.length === 0) return localList();
+      if (!data || data.length === 0) return legacyDemoAuth ? localList() : [];
       return data.map(mapAnnouncement);
     } catch (e) {
+      if (!legacyDemoAuth) throw e;
       console.warn('getAnnouncements: falling back to local announcements (non-fatal)', e);
       return localList();
     }
@@ -1433,11 +1478,12 @@ export const api = {
       else list[idx] = { ...list[idx], ...row };
       saveOfflineData('announcements', list);
     };
-    if (useOfflineMock) return saveLocal();
+    if (legacyDemoAuth && useOfflineMock) return saveLocal();
     try {
       const { error } = await supabase.from('announcements').upsert(row);
       if (error) throw error;
     } catch (e) {
+      if (!legacyDemoAuth) throw e;
       console.warn('saveAnnouncement: falling back to local save (non-fatal)', e);
       saveLocal();
     }
@@ -1449,11 +1495,12 @@ export const api = {
       const list = getOfflineData('announcements', defaultOfflineAnnouncements).filter((a: any) => a.id !== id);
       saveOfflineData('announcements', list);
     };
-    if (useOfflineMock) return deleteLocal();
+    if (legacyDemoAuth && useOfflineMock) return deleteLocal();
     try {
       const { error } = await supabase.from('announcements').delete().eq('id', id);
       if (error) throw error;
     } catch (e) {
+      if (!legacyDemoAuth) throw e;
       console.warn('deleteAnnouncement: falling back to local delete (non-fatal)', e);
       deleteLocal();
     }
@@ -1462,14 +1509,14 @@ export const api = {
   completeTraining: async (staffId: string, trainingId: string): Promise<void> => {
     return callSupabase(
       async () => {
-        const { data: staffData, error: staffError } = await supabase.from('staffs').select('*').eq('id', staffId).single();
+        const { data: staffData, error: staffError } = await supabase.from('staffs').select(legacyDemoAuth ? '*' : readColumns.staffs).eq('id', staffId).single();
         if (staffError || !staffData) return;
         const staff = mapStaff(staffData);
 
         const updatedTrainings = Array.from(new Set([...(staff.completedTrainings || []), trainingId]));
         await supabase.from('staffs').update({ completed_trainings: updatedTrainings }).eq('id', staffId);
 
-        const { data: talentData } = await supabase.from('talents').select('*').or(`name.eq."${staff.name}",masked_name.eq."${staff.maskedName}"`);
+        const { data: talentData } = await supabase.from('talents').select(legacyDemoAuth ? '*' : readColumns.talents).or(`name.eq."${staff.name}",masked_name.eq."${staff.maskedName}"`);
         if (talentData && talentData.length > 0) {
           for (const t of talentData) {
             const talent = mapTalent(t);
@@ -1502,9 +1549,10 @@ export const api = {
   },
 
   getContractTasks: async (): Promise<ContractTask[]> => {
+    if (!legacyDemoAuth) return (await readAuditedRows('contract_tasks')).map(mapContractTask);
     return callSupabase(
       async () => {
-        const { data, error } = await supabase.from('contract_tasks').select('*');
+        const { data, error } = await supabase.from('contract_tasks').select(legacyDemoAuth ? '*' : readColumns.contract_tasks);
         if (error) throw error;
         return data.map(mapContractTask);
       },
@@ -1833,6 +1881,9 @@ export const api = {
     return callSupabase(
       async () => {
         const row = unmapContractTask(task);
+        if (!legacyDemoAuth && ['offered','confirmed','working','report_pending','completed','disputed'].includes(task.status)) {
+          row.sb_approval_id = await requireSbApproval(task.jobId, task.agency_id || '', task.sbStaffId || '');
+        }
         row.evaluations = task.evaluations;
         const { error } = await supabase.from('contract_tasks').insert([row]);
         if (error) throw error;
@@ -1857,7 +1908,7 @@ export const api = {
   ): Promise<ContractTask> => {
     return callSupabase(
       async () => {
-        const { data: taskData, error: taskError } = await supabase.from('contract_tasks').select('*').eq('id', taskId).single();
+        const { data: taskData, error: taskError } = await supabase.from('contract_tasks').select(legacyDemoAuth ? '*' : readColumns.contract_tasks).eq('id', taskId).single<{ job_id: string; evaluations: ContractTask['evaluations'] }>();
         if (taskError || !taskData) throw new Error('Task not found');
         const task = mapContractTask(taskData);
 
@@ -1888,7 +1939,7 @@ export const api = {
 
         if (target === 'byClient' && hasLateness !== undefined) {
           try {
-            const { data: staffsData } = await supabase.from('staffs').select('*');
+            const { data: staffsData } = await supabase.from('staffs').select(legacyDemoAuth ? '*' : readColumns.staffs);
             if (staffsData) {
               const staffRow = staffsData.find((s: any) => s.name === task.workerName);
               if (staffRow) {
@@ -1972,7 +2023,7 @@ export const api = {
 
     return callSupabase(
       async () => {
-        const { data: taskData, error: taskError } = await supabase.from('contract_tasks').select('*').eq('id', taskId).single();
+        const { data: taskData, error: taskError } = await supabase.from('contract_tasks').select(legacyDemoAuth ? '*' : readColumns.contract_tasks).eq('id', taskId).single<{ job_id: string; evaluations: ContractTask['evaluations'] }>();
         if (taskError || !taskData) throw new Error('Task not found');
         const { evaluations, chatStatus } = buildEvals(taskData.evaluations, taskData.job_id);
         const { error: updateError } = await supabase
@@ -2000,9 +2051,10 @@ export const api = {
   },
 
   getUsers: async (): Promise<User[]> => {
+    if (!legacyDemoAuth) return (await readAuditedRows('companies')).map(mapUser);
     return callSupabase(
       async () => {
-        const { data, error } = await supabase.from('companies').select('*');
+        const { data, error } = await supabase.from('companies').select(legacyDemoAuth ? '*' : readColumns.companies);
         if (error) throw error;
         return data.map(mapUser);
       },
@@ -2016,6 +2068,7 @@ export const api = {
   registerCompany: async (company: Omit<User, 'id'>): Promise<User> => {
     const id = 'c' + Date.now();
     const newUser: User = { ...company, id, status: 'pending', role: 'contractor' };
+    if (!legacyDemoAuth) throw new Error('会社登録は管理者による招待が必要です。');
     localStorage.setItem('company_status_' + id, 'pending');
     if (newUser.invoiceNumber) {
       localStorage.setItem('company_invoice_' + id, newUser.invoiceNumber);
@@ -2070,6 +2123,7 @@ export const api = {
   },
 
   updateStaffRole: async (staffId: string, role: 'admin' | 'staff'): Promise<void> => {
+    if (!legacyDemoAuth) throw new Error('権限変更は管理者のサーバー処理が必要です。');
     localStorage.setItem('staff_role_' + staffId, role);
     return callSupabase(
       async () => {
@@ -2087,13 +2141,13 @@ export const api = {
   },
 
   updateStaff: async (staffId: string, staff: Partial<Staff>): Promise<void> => {
-    if (staff.role) {
+    if (legacyDemoAuth && staff.role) {
       localStorage.setItem('staff_role_' + staffId, staff.role);
     }
-    if (staff.loginId) {
+    if (legacyDemoAuth && staff.loginId) {
       localStorage.setItem('staff_login_' + staffId, staff.loginId);
     }
-    if (staff.password) {
+    if (legacyDemoAuth && staff.password) {
       localStorage.setItem('staff_password_' + staffId, staff.password);
     }
 
@@ -2196,6 +2250,7 @@ export const api = {
   },
 
   updateUser: async (user: User): Promise<void> => {
+    if (!legacyDemoAuth) throw new Error('会社情報の更新はサーバー側の保存処理を準備中です。');
     localStorage.setItem('company_favorite_jobs_' + user.id, JSON.stringify(user.favoriteJobIds || []));
     localStorage.setItem('company_favorite_talents_' + user.id, JSON.stringify(user.favoriteTalentIds || []));
     localStorage.setItem('company_favorite_folders_' + user.id, JSON.stringify(user.favoriteFolders || []));
@@ -2212,6 +2267,7 @@ export const api = {
   },
 
   updateCompanyStatus: async (companyId: string, status: 'pending' | 'approved' | 'rejected'): Promise<void> => {
+    if (!legacyDemoAuth) throw new Error('会社承認は管理者のサーバー処理が必要です。');
     localStorage.setItem('company_status_' + companyId, status);
     return callSupabase(
       async () => {
@@ -2231,7 +2287,7 @@ export const api = {
   seedStaffAttendanceLogs: async (): Promise<void> => {
     return callSupabase(
       async () => {
-        const { data: staffs, error } = await supabase.from('staffs').select('*');
+        const { data: staffs, error } = await supabase.from('staffs').select(legacyDemoAuth ? '*' : readColumns.staffs);
         if (error || !staffs) return;
         for (const sRow of staffs) {
           const staff = mapStaff(sRow);

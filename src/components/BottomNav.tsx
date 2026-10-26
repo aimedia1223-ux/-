@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { legacyDemoAuth } from '../lib/auth';
 import { api, subscribeToContractTaskChanges } from '../data/mockDb';
 
 export function BottomNav() {
@@ -8,6 +9,8 @@ export function BottomNav() {
   const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   useEffect(() => {
+    // 専用連絡には未読管理をまだ設けていない。旧デモの未読を表示しない。
+    if (!legacyDemoAuth) { setPendingCount(0); setUnreadChatCount(0); return; }
     const checkNotificationCounts = async () => {
       try {
         const currentUser = await api.getCurrentUser();

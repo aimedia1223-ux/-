@@ -27,21 +27,40 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
           
       - name: Install dependencies
         run: npm ci
-        
-      - name: Build
-        run: npm run build
+
+      - name: Test authentication
+        run: npm run test:auth
+
+      - name: Test data access policies
+        run: npm run test:access
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Check public connection settings
+        run: |
+          test -n "$VITE_SUPABASE_URL" || { echo "Set VITE_SUPABASE_URL in repository Variables."; exit 1; }
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY$VITE_SUPABASE_ANON_KEY" || { echo "Set VITE_SUPABASE_PUBLISHABLE_KEY in repository Variables."; exit 1; }
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Build
+        run: npm run build -- --base "${{ steps.pages.outputs.base_path }}/"
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
-        
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+          VITE_GOOGLE_MAP_ID: ${{ vars.VITE_GOOGLE_MAP_ID || secrets.VITE_GOOGLE_MAP_ID }}
+          VITE_ENABLE_LEGACY_DEMO_AUTH: 'false'
         
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

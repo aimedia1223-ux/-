@@ -1,12 +1,14 @@
+import { legacyDemoAuth, MfaRequiredError } from '../lib/auth';
 import { useState, useEffect } from 'react';
 import { api } from '../data/mockDb';
 import type { User, Staff } from '../data/mockDb';
 
 interface LoginPageProps {
   onLoginSuccess: () => void;
+  notice?: string;
 }
 
-export function LoginPage({ onLoginSuccess }: LoginPageProps) {
+export function LoginPage({ onLoginSuccess, notice }: LoginPageProps) {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
@@ -34,6 +36,7 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [showDebug, setShowDebug] = useState(false);
 
   const loadCompanies = async () => {
+    if (!legacyDemoAuth) return;
     const list = await api.getUsers();
     setCompanies(list);
     try {
@@ -73,7 +76,7 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
     try {
       const user = await api.login(loginId, password);
       if (user) {
-        const freshUser = await api.getUserById(user.id);
+        const freshUser = legacyDemoAuth ? await api.getUserById(user.id) : user;
         const status = freshUser?.status || 'approved';
         
         if (status === 'pending') {
@@ -89,7 +92,8 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
         setError('ログインIDまたはパスワードが正しくありません。');
       }
     } catch (err) {
-      setError('システムエラーが発生しました。');
+      if (err instanceof MfaRequiredError) { setPassword(''); onLoginSuccess(); }
+      else setError('システムエラーが発生しました。');
     } finally {
       setLoading(false);
       loadCompanies();
@@ -183,6 +187,7 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
               ログイン
             </button>
             <button
+              disabled={!legacyDemoAuth}
               onClick={() => { setActiveTab('signup'); setError(''); setSignupSuccess(''); }}
               style={activeTab === 'signup' ? styles.activeTab : styles.inactiveTab}
             >
@@ -190,19 +195,22 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
             </button>
           </div>
 
+          {!legacyDemoAuth && <p>管理者から案内された個人アカウントでログインしてください。</p>}
+          {notice && <div role="status" style={styles.errorBanner}>{notice}</div>}
           {error && <div style={styles.errorBanner}>{error}</div>}
           {signupSuccess && <div style={styles.successBanner}>{signupSuccess}</div>}
 
           {activeTab === 'login' ? (
             <form onSubmit={handleSubmit} style={styles.form}>
               <div style={styles.inputGroup}>
-                <label style={styles.label}>ログインID</label>
+                <label style={styles.label}>{legacyDemoAuth ? 'ログインID' : 'メールアドレス'}</label>
                 <input
-                  type="text"
+                  type={legacyDemoAuth ? 'text' : 'email'}
+                  autoComplete="username"
                   value={loginId}
                   onChange={(e) => setLoginId(e.target.value)}
                   disabled={loading}
-                  placeholder="ログインIDを入力"
+                  placeholder={legacyDemoAuth ? "ログインIDを入力" : "登録済みのメールアドレスを入力"}
                   style={styles.input}
                 />
               </div>
@@ -211,6 +219,7 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
                 <label style={styles.label}>パスワード</label>
                 <input
                   type="password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
@@ -241,11 +250,17 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
                 {loading ? 'ログイン中...' : 'ログイン'}
               </button>
 
-              <div style={styles.divider}>
-                <span style={styles.dividerText}>テストアカウントで簡単ログイン</span>
-              </div>
+              {!legacyDemoAuth && (
+                <a href={`${import.meta.env.BASE_URL}reset-password.html`} style={{ textAlign: 'center' }}>
+                  パスワードを設定・再設定する
+                </a>
+              )}
 
-              <div style={styles.inputGroup}>
+              {legacyDemoAuth && <div style={styles.divider}>
+                <span style={styles.dividerText}>テストアカウントで簡単ログイン</span>
+              </div>}
+
+              {legacyDemoAuth && <div style={styles.inputGroup}>
                 <label style={styles.label}>テスト企業を選択</label>
                 <select
                   value={selectedCompany}
@@ -258,9 +273,9 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
-              </div>
+              </div>}
 
-              {selectedCompany && (
+              {legacyDemoAuth && selectedCompany && (
                 <div style={{ ...styles.inputGroup, marginTop: '8px' }}>
                   <label style={styles.label}>ログインする個人ユーザーを選択</label>
                   <select
@@ -408,7 +423,7 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
         </div>
 
         {/* Developer Sandbox Panel — dev builds only, stripped entirely from production bundles */}
-        {import.meta.env.DEV && (
+        {legacyDemoAuth && (
         <div style={styles.debugPanel}>
           <div
             onClick={() => setShowDebug(!showDebug)}
