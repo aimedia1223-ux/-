@@ -42,7 +42,10 @@ test('確定文書は対象・版・署名なし表示とSHA256の一致を検�
  const sha256=require('node:crypto').createHash('sha256').update(canonical_payload).digest('hex');
  const data={canonical_payload,sha256,filename:`Connexy_contract_${id}_v1.json`};
  const good=setup({data,error:null});assert.equal(JSON.parse((await good.api.exportContractDocument(id)).text).sha256,sha256);
- assert.equal(good.calls[0][0],'connexy_export_contract_document');assert.deepEqual(Object.keys(good.calls[0][1]),['target_offer']);
- const pdf=setup({data,error:null});await pdf.api.exportContractDocument(id,'pdf');assert.equal(pdf.calls[0][0],'connexy_read_contract_pdf_source');assert.deepEqual(Object.keys(pdf.calls[0][1]),['target_offer']);
+ assert.equal(good.calls[0][0],'connexy_export_contract_version');assert.deepEqual(Object.keys(good.calls[0][1]).sort(),['target_offer','target_version']);assert.equal(good.calls[0][1].target_version,1);
+ const pdf=setup({data,error:null});await pdf.api.exportContractDocument(id,'pdf');assert.equal(pdf.calls[0][0],'connexy_read_contract_version_pdf');assert.deepEqual(Object.keys(pdf.calls[0][1]).sort(),['target_offer','target_version']);
+ const nextPayload=JSON.stringify({record_type:'confirmed_contract',version:2,offer_id:id,signature:'none'}),nextHash=require('node:crypto').createHash('sha256').update(nextPayload).digest('hex');
+ const next=setup({data:{canonical_payload:nextPayload,sha256:nextHash,filename:`Connexy_contract_${id}_v2.json`},error:null});await next.api.exportContractDocument(id,'pdf',2);assert.equal(next.calls[0][1].target_version,2);
+ await assert.rejects(setup({data,error:null}).api.exportContractDocument(id,'json',2));
  for(const bad of [{...data,sha256:'0'.repeat(64)},{...data,canonical_payload:'null'},{...data,filename:'other.json'},{...data,canonical_payload:'SECRET_BROKEN_JSON'}])await assert.rejects(setup({data:bad,error:null}).api.exportContractDocument(id),e=>!e.message.includes('SECRET_BROKEN_JSON'));
 });

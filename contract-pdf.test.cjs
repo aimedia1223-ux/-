@@ -26,3 +26,9 @@ test('同梱日本語フォントで通常文書と長文の複数ページを�
 test('未対応文字や壊れたフォントを成功PDFとして扱わない',()=>{
  const p=payload();p.snapshot.staff_name='架空担当者😀';assert.throws(()=>buildContractPdf(parse(p),font),/対応していない文字/);assert.throws(()=>buildContractPdf(parse(payload()),''));
 });
+
+test('版2は指定した版でのみ読み、PDFにも版2と改訂条件を反映する',()=>{
+ const p=payload();p.version=2;p.amendment_id='00000000-0000-4000-8000-000000000002';p.change_reason='架空の経費条件の変更を確認します。';p.previous_version_sha256='a'.repeat(64);p.contract_details.expenses='架空の変更合意による経費条件です。';p.confirmed_at='2026-10-26T02:00:00Z';const canonical=JSON.stringify(p),hash=createHash('sha256').update(canonical).digest('hex');
+ assert.throws(()=>parseContractPdfSource(canonical,hash,id,1));const source=parseContractPdfSource(canonical,hash,id,2);assert.equal(source.version,2);assert.equal(source.details.expenses,p.contract_details.expenses);
+ fs.writeFileSync('output/pdf/Connexy-contract-v2-example.pdf',Buffer.from(buildContractPdf(source,font)));
+});

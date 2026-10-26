@@ -4,7 +4,7 @@ const ts = require('typescript');
 const vm = require('node:vm');
 const fs = require('node:fs');
 
-function setup({ identity, user = { id: 'auth-1' }, rpcError = null, loginError = null, dev = false, demo = 'true', aal = 'aal2', next = 'aal2', mfaError = null, factors = [] } = {}) {
+function setup({ identity, user = { id: 'auth-1' }, rpcError = null, loginError = null, dev = false, demo = 'true', aal = 'aal2', next = 'aal2', mfaError = null, factors = [], mfaRequired = true, policyError = null } = {}) {
   const calls = [];
   const supabase = {
     auth: {
@@ -16,7 +16,7 @@ function setup({ identity, user = { id: 'auth-1' }, rpcError = null, loginError 
       signInWithPassword: async (input) => { calls.push(input); return { error: loginError }; },
       signOut: async () => { calls.push('signOut'); return { error: null }; },
     },
-    rpc: async (name) => { calls.push(name); return { data: identity ? [identity] : [], error: rpcError }; },
+    rpc: async (name) => { calls.push(name); return name === 'connexy_mfa_is_required' ? {data:mfaRequired,error:policyError} : { data: identity ? [identity] : [], error: rpcError }; },
   };
   const source = fs.readFileSync('src/lib/auth.ts', 'utf8')
     .replaceAll('import.meta.env.DEV', JSON.stringify(dev))
@@ -81,4 +81,17 @@ test('追加認証の確認が通信障害なら所属RPCを実行しない', as
   const {api,calls}=setup({identity:approved,mfaError:new Error('mfa unavailable')});
   await assert.rejects(api.loginWithAuth('a@example.com','secret'),/mfa unavailable/);
   assert.deepEqual(calls.slice(1),['signOut']);
+});
+
+test('開発時にサーバーが明示的に省略を許可した本人だけ所属を取得する',async()=>{
+ const {api,calls}=setup({identity:approved,dev:true,aal:'aal1',mfaRequired:false});
+ assert.equal((await api.getAuthenticatedUser()).id,'company-a');
+ assert.deepEqual(calls,['connexy_mfa_is_required','connexy_current_identity']);
+});
+test('本番・例外なし・取得エラー・形式不正では追加認証を維持する',async()=>{
+ for(const options of [{dev:false,mfaRequired:false},{dev:true,mfaRequired:true},{dev:true,mfaRequired:false,policyError:{code:'ERROR'}},{dev:true,mfaRequired:null}]){
+  const {api,calls}=setup({identity:approved,aal:'aal1',...options});
+  await assert.rejects(api.getAuthenticatedUser(),api.MfaRequiredError);
+  assert.equal(calls.includes('connexy_current_identity'),false);
+ }
 });

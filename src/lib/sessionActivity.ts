@@ -7,10 +7,10 @@ export const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 function activityKey(user: SessionUser) {
   return `connexy_activity:${encodeURIComponent(user.id)}:${encodeURIComponent(user.staffId || '')}`;
 }
-export function isSessionLocked(user: SessionUser, storage: ActivityStorage = localStorage) {
+export function isSessionLocked(user: SessionUser, storage: ActivityStorage = sessionStorage) {
   try { return storage.getItem(`${activityKey(user)}:locked`) === '1'; } catch { return true; }
 }
-export function markSessionActive(user: SessionUser, storage: ActivityStorage = localStorage, now = Date.now()) {
+export function markSessionActive(user: SessionUser, storage: ActivityStorage = sessionStorage, now = Date.now()) {
   storage.setItem(activityKey(user), String(now));
   storage.removeItem(`${activityKey(user)}:locked`);
 }
@@ -27,9 +27,9 @@ interface MonitorOptions {
   cancel?: (id: number) => void;
 }
 
-// 無操作ロックは画面保護。localStorageを変更できる利用者への認可はDB側の8時間上限で担保する。
+// 無操作ロックはタブ内の画面保護。認可はDB側の8時間上限で担保する。
 export function startSessionMonitor(options: MonitorOptions) {
-  const { user, onExpire, onRevalidate, storage = localStorage, events = window,
+  const { user, onExpire, onRevalidate, storage = sessionStorage, events = window,
     visibilityEvents = document, now = Date.now,
     schedule = window.setInterval.bind(window), cancel = window.clearInterval.bind(window) } = options;
   const key = activityKey(user);

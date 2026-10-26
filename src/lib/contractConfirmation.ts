@@ -16,6 +16,7 @@ export type ContractOffer = {
   status: 'offered' | 'confirmed' | 'declined' | 'withdrawn';
   created_at: string; expires_at: string; responded_at: string | null; contract_id: string | null;
   contract_details: ContractDetails | null; document_version: number | null;
+  latest_version_confirmed_at?:string;
 };
 
 function fail(code?: string): never {
@@ -42,14 +43,15 @@ export async function createContractOffer(input: { requestId: string; jobId: str
   return data;
 }
 
-export async function exportContractDocument(offerId: string,format:'json'|'pdf'='json'): Promise<{filename:string;text:string}> {
-  const {data,error}=await supabase.rpc(format==='pdf'?'connexy_read_contract_pdf_source':'connexy_export_contract_document',{target_offer:offerId});
+export async function exportContractDocument(offerId: string,format:'json'|'pdf'='json',version=1): Promise<{filename:string;text:string}> {
+  if(!Number.isSafeInteger(version)||version<1)fail();
+  const {data,error}=await supabase.rpc(format==='pdf'?'connexy_read_contract_version_pdf':'connexy_export_contract_version',{target_offer:offerId,target_version:version});
   if(error)fail(error.code);
   if(!data || typeof data.canonical_payload!=='string' || !/^[a-f0-9]{64}$/.test(data.sha256)
-    || data.filename!==`Connexy_contract_${offerId}_v1.json`)fail();
+    || data.filename!==`Connexy_contract_${offerId}_v${version}.json`)fail();
   let payload;
   try { payload=JSON.parse(data.canonical_payload); } catch { fail(); }
-  if(!payload || payload.record_type!=='confirmed_contract' || payload.version!==1 || payload.offer_id!==offerId || payload.signature!=='none')fail();
+  if(!payload || payload.record_type!=='confirmed_contract' || payload.version!==version || payload.offer_id!==offerId || payload.signature!=='none')fail();
   const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(data.canonical_payload));
   if(Array.from(new Uint8Array(hash),n=>n.toString(16).padStart(2,'0')).join('')!==data.sha256)fail();
   return{filename:data.filename,text:JSON.stringify({canonical_payload:data.canonical_payload,sha256:data.sha256},null,2)};

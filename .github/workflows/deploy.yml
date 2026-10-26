@@ -33,11 +33,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Test authentication
-        run: npm run test:auth
-
-      - name: Test data access policies
-        run: npm run test:access
+      - name: Test review site and access controls
+        run: node --test *.test.cjs
 
       - name: Setup Pages
         id: pages
@@ -58,8 +55,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
-          VITE_GOOGLE_MAP_ID: ${{ vars.VITE_GOOGLE_MAP_ID || secrets.VITE_GOOGLE_MAP_ID }}
+          VITE_BUILD_REVISION: ${{ github.sha }}
           VITE_ENABLE_LEGACY_DEMO_AUTH: 'false'
         
       - name: Upload artifact

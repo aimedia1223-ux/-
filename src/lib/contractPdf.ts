@@ -2,10 +2,10 @@ import {jsPDF} from 'jspdf';
 
 type ContractDetails = {tax:string;expenses:string;payment_due:string;inspection_due:string;termination:string;intellectual_property:string;liability:string};
 export type ContractPdfSource = {
-  offerId:string;contractId:string;version:1;presentedAt:string;confirmedAt:string;
+  offerId:string;contractId:string;version:number;presentedAt:string;confirmedAt:string;
   clientName:string;agencyName:string;staffName:string;jobTitle:string;description:string;detailedDescription:string|null;
   location:string;hours:string;requirements:string[];dates:string[];dailyPrice:number;totalPrice:number;additionalTerms:string;
-  approvalId:string;approvalNumber:string;details:ContractDetails;sourceSha256:string;testOnly:boolean;
+  approvalId:string;approvalNumber:string;details:ContractDetails;sourceSha256:string;testOnly:boolean;changeReason:string|null;previousHash:string|null;
 };
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function invalid():never {throw new Error('確定内容をPDFとして確認できません。一覧を更新して再取得してください。');}
@@ -14,9 +14,9 @@ function object(value:unknown):Record<string,unknown>{if(!value||typeof value!==
 function date(value:unknown):string {const s=text(value,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||!Number.isFinite(Date.parse(s))||new Date(s).toISOString().slice(0,10)!==s)invalid();return s;}
 function timestamp(value:unknown):string{const s=text(value,50);if(!/^\d{4}-\d{2}-\d{2}T/.test(s)||!Number.isFinite(Date.parse(s)))invalid();return s;}
 function money(value:unknown):number{if(typeof value!=='number'||!Number.isFinite(value)||value<0||value>1e12)invalid();return value;}
-export function parseContractPdfSource(canonical:string,hash:string,offerId:string):ContractPdfSource {
+export function parseContractPdfSource(canonical:string,hash:string,offerId:string,expectedVersion=1):ContractPdfSource {
   let raw:unknown;try{raw=JSON.parse(canonical);}catch{invalid();}
-  const p=object(raw);if(p.record_type!=='confirmed_contract'||p.version!==1||p.signature!=='none'||p.offer_id!==offerId||!uuid.test(offerId)||p.contract_id!==`ct_${offerId}`||!uuid.test(String(p.approval_id))||!/^([a-f0-9]{64})$/.test(hash))invalid();
+  const p=object(raw);if(!Number.isSafeInteger(expectedVersion)||expectedVersion<1||p.record_type!=='confirmed_contract'||p.version!==expectedVersion||p.signature!=='none'||p.offer_id!==offerId||!uuid.test(offerId)||p.contract_id!==`ct_${offerId}`||!uuid.test(String(p.approval_id))||!/^([a-f0-9]{64})$/.test(hash))invalid();
   const snapshot=object(p.snapshot),job=object(snapshot.job),details=object(p.contract_details);
   if(!Array.isArray(p.work_dates)||p.work_dates.length<1||p.work_dates.length>366)invalid();
   const dates=p.work_dates.map(date);if(new Set(dates).size!==dates.length)invalid();
@@ -24,10 +24,11 @@ export function parseContractPdfSource(canonical:string,hash:string,offerId:stri
   if(job.requirements!=null&&!Array.isArray(job.requirements))invalid();
   const requirements=((job.requirements||[]) as unknown[]).map(v=>text(v,2000)).filter(v=>!v.startsWith('__'));
   const typedDetails:ContractDetails={tax:text(details.tax,2000),expenses:text(details.expenses,2000),payment_due:date(details.payment_due),inspection_due:date(details.inspection_due),termination:text(details.termination,2000),intellectual_property:text(details.intellectual_property,2000),liability:text(details.liability,2000)};
-  return {offerId,contractId:String(p.contract_id),version:1,presentedAt:timestamp(p.presented_at),confirmedAt:timestamp(p.confirmed_at),clientName:text(snapshot.client_name,1000),agencyName:text(snapshot.agency_name,1000),staffName:text(snapshot.staff_name,1000),
+  if(expectedVersion>1&&(!uuid.test(String(p.amendment_id))||typeof p.previous_version_sha256!=='string'||!/^[a-f0-9]{64}$/.test(p.previous_version_sha256)))invalid();
+  return {offerId,contractId:String(p.contract_id),version:expectedVersion,presentedAt:timestamp(p.presented_at),confirmedAt:timestamp(p.confirmed_at),clientName:text(snapshot.client_name,1000),agencyName:text(snapshot.agency_name,1000),staffName:text(snapshot.staff_name,1000),
     jobTitle:text(job.title,2000),description:text(job.description),detailedDescription:job.detailed_description?text(job.detailed_description):null,
     location:text(job.exact_location||job.work_location||job.location_name||'案件に指定なし',2000),hours:text(job.work_hours||'案件に指定なし',2000),requirements,dates,dailyPrice:daily,totalPrice:total,additionalTerms:text(p.additional_terms),
-    approvalId:String(p.approval_id),approvalNumber:text(p.approval_number,1000),details:typedDetails,sourceSha256:hash,testOnly:job.id==='connexy-browser-contract-test'};
+    approvalId:String(p.approval_id),approvalNumber:text(p.approval_number,1000),details:typedDetails,sourceSha256:hash,testOnly:job.id==='connexy-browser-contract-test',changeReason:expectedVersion>1?text(p.change_reason,2000):null,previousHash:expectedVersion>1?String(p.previous_version_sha256):null};
 }
 
 export function buildContractPdf(source:ContractPdfSource,fontBase64:string):ArrayBuffer {
@@ -64,9 +65,10 @@ export function buildContractPdf(source:ContractPdfSource,fontBase64:string):Arr
   section('09  責任・損害賠償の条件',source.details.liability);
   section('10  追加条件',source.additionalTerms);
   section('11  再委託承諾の照合記録',`承諾照合番号：${source.approvalNumber}\n照合記録ID：${source.approvalId}\n承諾書の原本は本PDFに含みません。`);
-  section('12  保存内容の確認',`原データのSHA256：\n${source.sourceSha256}\nこの値は保存済み原データの内容確認用です。PDF自体のハッシュ、電子署名、第三者による時刻証明ではありません。\nPDFへの出力は契約条件を変更せず、新しい合意や承諾を与える操作ではありません。`);
+  if(source.changeReason)section('12  変更合意の情報',`変更理由：${source.changeReason}\n変更前の版${source.version-1}の原データSHA256：\n${source.previousHash}`);
+  section(`${source.changeReason?'13':'12'}  保存内容の確認`,`原データのSHA256：\n${source.sourceSha256}\nこの値は保存済み原データの内容確認用です。PDF自体のハッシュ、電子署名、第三者による時刻証明ではありません。\nPDFへの出力は契約条件を変更せず、新しい合意や承諾を与える操作ではありません。`);
   const pages=doc.getNumberOfPages();if(pages>100)throw new Error('PDFのページ数が上限を超えました。JSON出力を利用してください。');
-  for(let page=1;page<=pages;page++){doc.setPage(page);doc.setDrawColor(210,220,230);doc.line(18,281,192,281);doc.setTextColor(90);drawText(`Connexy / 保存文書 版1 / 電子署名なし`,18,287,8);drawText(`${page} / ${pages}`,181,287,8);}
+  for(let page=1;page<=pages;page++){doc.setPage(page);doc.setDrawColor(210,220,230);doc.line(18,281,192,281);doc.setTextColor(90);drawText(`Connexy / 保存文書 版${source.version} / 電子署名なし`,18,287,8);drawText(`${page} / ${pages}`,181,287,8);}
   doc.setProperties({title:'個別業務委託契約書（確定内容）',subject:'確定済みの保存内容・電子署名なし',creator:'Connexy',author:'Connexy'});
   return doc.output('arraybuffer');
 }

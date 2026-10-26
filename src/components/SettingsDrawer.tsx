@@ -41,7 +41,7 @@ export function SettingsDrawer({ isOpen, onClose, onLogoutSuccess }: SettingsDra
           setGenderInput((user.gender as any) || '男性');
           setContractTemplateInput(user.contractTemplate || '');
           setContractPdfInput(user.contractPdf || '');
-          const localPdfName = localStorage.getItem('company_contract_pdf_name_' + user.id) || '';
+          const localPdfName = legacyDemoAuth ? localStorage.getItem('company_contract_pdf_name_' + user.id) || '' : '';
           setPdfName(user.contractPdf ? (localPdfName || '登録済みPDF') : '');
         }
       };

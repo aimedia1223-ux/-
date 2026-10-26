@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../data/mockDb';
+import { legacyDemoAuth } from '../lib/auth';
 import type { ContractTask, Announcement } from '../data/mockDb';
 
 type DetailType = 'none' | 'income' | 'transfer';
@@ -30,7 +31,7 @@ export function HomePage() {
       }
 
       // Restore GPS state from storage if any
-      const savedCheckin = localStorage.getItem('connexy_checkin_time');
+      const savedCheckin = legacyDemoAuth ? localStorage.getItem('connexy_checkin_time') : null;
       if (savedCheckin) {
         setIsCheckedIn(true);
         setCheckinTime(savedCheckin);
@@ -52,6 +53,7 @@ export function HomePage() {
   };
 
   const handleCheckin = () => {
+    if (!legacyDemoAuth) { alert('出退勤の保存機能は準備中です。現在は打刻を保存できません。'); return; }
     setIsVerifyingGps(true);
     setTimeout(() => {
       setIsVerifyingGps(false);

@@ -1,6 +1,7 @@
 import { legacyDemoAuth, MfaRequiredError } from '../lib/auth';
 import { useState, useEffect } from 'react';
 import { api } from '../data/mockDb';
+import { reviewBuildLabel } from '../lib/reviewBuild';
 import type { User, Staff } from '../data/mockDb';
 
 interface LoginPageProps {
@@ -176,6 +177,7 @@ export function LoginPage({ onLoginSuccess, notice }: LoginPageProps) {
             <span className="material-symbols-outlined" style={styles.logoIcon}>hub</span>
             <h1 style={styles.title}>connexy</h1>
             <p style={styles.subtitle}>通信業界BtoBマッチングプラットフォーム</p>
+            {!legacyDemoAuth && <p style={{fontSize:12,color:'#64748b',marginTop:12}}>ログインはこのタブ内で保持します。通常、タブを閉じると再ログインが必要です。共有端末では必ずログアウトしてください。</p>}
           </div>
 
           {/* Tab Switcher */}
@@ -510,7 +512,7 @@ export function LoginPage({ onLoginSuccess, notice }: LoginPageProps) {
         </div>
         )}
         <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '8px', textAlign: 'center' }}>
-          App Version: v1.1.3 (Build: 2026-07-16 18:13)
+          機能・デザイン確認版 ／ 更新番号：{reviewBuildLabel}
         </div>
       </div>
     </div>

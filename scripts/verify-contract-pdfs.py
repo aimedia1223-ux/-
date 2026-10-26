@@ -9,7 +9,7 @@ root = Path(__file__).resolve().parents[1]
 proof = root / 'tmp' / 'pdfs' / 'contract-preview'
 proof.mkdir(parents=True, exist_ok=True)
 results = []
-for name in ['Connexy-contract-example', 'Connexy-contract-long-example']:
+for name in ['Connexy-contract-example', 'Connexy-contract-long-example', 'Connexy-contract-v2-example']:
     path = root / 'output' / 'pdf' / (name + '.pdf')
     reader = PdfReader(path)
     text = '\n'.join(p.extract_text() for p in reader.pages)
@@ -17,6 +17,10 @@ for name in ['Connexy-contract-example', 'Connexy-contract-long-example']:
         assert required in text, (name, required)
     assert '__JOB_CODE__' not in text
     assert 'SECRET_INTERNAL' not in text
+    if 'v2' in name:
+        assert '保存文書の版：2' in text
+        assert '架空の変更合意による経費条件です。' in text
+        assert '保存文書 版2' in text
     if 'long' in name:
         assert '長文末尾確認印' in text
         assert '責任末尾確認印' in text

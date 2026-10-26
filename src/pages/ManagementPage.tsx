@@ -1294,6 +1294,7 @@ export function ManagementPage() {
 
   // 稼働不可日（NG日）設定用のState
   const [ngDates, setNgDates] = useState<string[]>(() => {
+    if (!legacyDemoAuth) return [];
     try {
       return JSON.parse(localStorage.getItem(`connexy_ng_dates_${currentUser?.id || 'guest'}`) || '[]');
     } catch (e) {
@@ -1302,7 +1303,7 @@ export function ManagementPage() {
   });
 
   useEffect(() => {
-    if (currentUser?.id) {
+    if (legacyDemoAuth && currentUser?.id) {
       try {
         const stored = localStorage.getItem(`connexy_ng_dates_${currentUser.id}`);
         if (stored) {
@@ -1315,6 +1316,7 @@ export function ManagementPage() {
   }, [currentUser?.id]);
 
   const handleToggleNgDate = (dateStr: string) => {
+    if (!legacyDemoAuth) { alert('稼働不可日の保存機能は準備中です。現在は保存できません。'); return; }
     const updated = ngDates.includes(dateStr) 
       ? ngDates.filter(d => d !== dateStr) 
       : [...ngDates, dateStr];
@@ -1985,7 +1987,7 @@ export function ManagementPage() {
                   </div>
                   {ngDates.length > 0 && (
                     <button 
-                      onClick={() => { setNgDates([]); localStorage.removeItem(`connexy_ng_dates_${currentUser?.id || 'guest'}`); }}
+                      onClick={() => { setNgDates([]); if (legacyDemoAuth) localStorage.removeItem(`connexy_ng_dates_${currentUser?.id || 'guest'}`); }}
                       style={{ background: '#FEE2E2', color: '#991B1B', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
                     >
                       一括クリア

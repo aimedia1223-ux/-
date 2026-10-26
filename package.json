@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:auth": "node --test auth.test.cjs password-recovery.test.cjs session-activity.test.cjs session-limits.test.cjs mfa-rls.test.cjs mfa-access-probe.test.cjs",
+    "test:auth": "node --test auth.test.cjs tab-auth-storage.test.cjs password-recovery.test.cjs session-activity.test.cjs session-limits.test.cjs mfa-rls.test.cjs mfa-access-probe.test.cjs",
     "test:access": "node --test data-access.test.cjs rls.test.cjs management-loader.test.cjs",
     "test:sb": "node --test sb-gate.test.cjs sb-verification.test.cjs",
     "test:contracts": "node --test contract-confirmation.test.cjs contract-gateway.test.cjs contract-flow-verification.test.cjs browser-contract-fixture.test.cjs contract-documents.test.cjs",
@@ -20,6 +20,8 @@
     "test:audited-reads": "node --test audited-reads.test.cjs audited-reads-gateway.test.cjs data-access.test.cjs",
     "test:deletion-records": "node --test deletion-records.test.cjs deletion-records-gateway.test.cjs",
     "test:contract-pdf": "node --test contract-pdf.test.cjs contract-documents.test.cjs contract-gateway.test.cjs",
+    "test:amendments": "node --test contract-amendments.test.cjs contract-amendments-gateway.test.cjs contract-gateway.test.cjs contract-pdf.test.cjs",
+    "test:privacy": "node --test browser-data-protection.test.cjs auth.test.cjs data-access.test.cjs job-disclosure-gateway.test.cjs",
     "verify:auth:config": "node scripts/verify-auth.mjs --check",
     "verify:auth": "node scripts/verify-auth.mjs"
   },

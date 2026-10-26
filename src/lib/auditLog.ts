@@ -14,6 +14,7 @@ export const auditActions:Record<string,string>={
  'deletion_record.created':'削除実施記録を作成','deletion_check.saved':'外部証跡の確認状況を保存',
  'deletion_records.read':'削除実施記録の一覧を取得','deletion_record.read':'削除実施記録の出力データを生成',
  'contract_pdf.read':'契約書PDF用の確定内容を取得',
+ 'amendment.created':'契約変更を提示','amendment.confirmed':'契約変更に同意・確定','amendment.declined':'契約変更を辞退','amendment.withdrawn':'契約変更を取下げ','contract_versions.read':'契約の版・変更履歴を取得',
 };
 export type AuditGroup='all'|'read'|'change'|'delete';
 export type AuditEvent={id:string;occurred_at:string;action:string;actor_kind:'own'|'counterparty'|'server';actor_staff_id:string|null;actor_name:string|null;target_type:string;target_id:string|null;version:number|null;item_count:number|null};

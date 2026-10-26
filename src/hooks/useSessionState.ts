@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { legacyDemoAuth } from '../lib/auth';
 
 export function useSessionState<T>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
   // Retrieve the stored value from sessionStorage (or use initialValue if none)
   const [state, setState] = useState<T>(() => {
+    if (!legacyDemoAuth) return initialValue;
     try {
       const item = sessionStorage.getItem(key);
       return item ? JSON.parse(item) : initialValue;
@@ -14,6 +16,7 @@ export function useSessionState<T>(key: string, initialValue: T): [T, React.Disp
 
   // Save the state to sessionStorage whenever it changes
   useEffect(() => {
+    if (!legacyDemoAuth) return;
     try {
       sessionStorage.setItem(key, JSON.stringify(state));
     } catch (error) {

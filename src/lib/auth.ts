@@ -18,7 +18,13 @@ export async function getAuthenticatedUser(freshLogin = false): Promise<User | n
   if (error || !data.user) return null;
   const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   if (assurance.error) throw assurance.error;
-  if (assurance.data.currentLevel !== 'aal2' || assurance.data.nextLevel !== 'aal2') {
+  let temporaryDemoException = false;
+  if (import.meta.env.DEV && assurance.data.currentLevel === 'aal1') {
+    // 例外はDB側の検証用アカウント・有効期限で限定する。取得失敗時は追加認証を維持。
+    const policy = await supabase.rpc('connexy_mfa_is_required');
+    temporaryDemoException = !policy.error && policy.data === false;
+  }
+  if (!temporaryDemoException && (assurance.data.currentLevel !== 'aal2' || assurance.data.nextLevel !== 'aal2')) {
     const factors = await supabase.auth.mfa.listFactors();
     if (factors.error) throw factors.error;
     throw new MfaRequiredError({ id: data.user.id, email: data.user.email || '',

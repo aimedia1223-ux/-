@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Job, User } from '../data/mockDb';
-import { contractDetailLabels, createContractOffer, exportContractDocument, listContractOffers, respondContractOffer } from '../lib/contractConfirmation';
+import { contractDetailLabels, createContractOffer, listContractOffers, respondContractOffer } from '../lib/contractConfirmation';
 import type { ContractDetails, ContractOffer } from '../lib/contractConfirmation';
+import {ContractAmendmentPanel} from './ContractAmendmentPanel';
+import {prepareContractFile,savePreparedContractFile} from '../lib/contractDownload';
 
 const labels = { offered: '相手の確認待ち', confirmed: '契約確定', declined: '辞退', withdrawn: '取り下げ' };
 const inputStyle = { width: '100%', padding: 10, border: '1px solid #b9c6d6', borderRadius: 8 };
@@ -21,6 +23,7 @@ export function ContractConfirmationPanel({ jobs, user, onBack }: { jobs: Job[];
   const [staffId,setStaffId] = useState('');
   const [terms,setTerms] = useState('');
   const [contractDetails,setContractDetails] = useState<ContractDetails>({...emptyDetails});
+  const [historyOffer,setHistoryOffer]=useState<string|null>(null);
   const [review,setReview] = useState<ContractOffer | null>(null);
   const [agreed,setAgreed] = useState(false);
   const requestId = useRef<string | null>(null);
@@ -90,33 +93,11 @@ export function ContractConfirmationPanel({ jobs, user, onBack }: { jobs: Job[];
       }
     });
   }
-  function download(offer:ContractOffer) {
+  function download(offer:ContractOffer,format:'json'|'pdf'='json') {
     void run(async()=>{
-      const file=await exportContractDocument(offer.id);
-      if(!active.current || document.visibilityState==='hidden')return;
-      const url=URL.createObjectURL(new Blob([file.text],{type:'application/json;charset=utf-8'}));
-      const link=document.createElement('a'); link.href=url;link.download=file.filename;link.click();
-      setTimeout(()=>URL.revokeObjectURL(url),1000);
-      setMessage('確定内容の出力データを生成しました。端末で保存結果を確認してください。電子署名付きの契約書PDFではありません。');
-    });
-  }
-  function downloadPdf(offer:ContractOffer) {
-    void run(async()=>{
-      const canExport=()=>active.current&&document.visibilityState!=='hidden';
-      // フォントと描画機能を先に準備し、確定内容は最後にサーバーへ再照会する。
-      const [{buildContractPdf,parseContractPdfSource},{loadContractPdfFont}]=await Promise.all([import('../lib/contractPdf'),import('../lib/contractPdfFont')]);
-      const font=await loadContractPdfFont();
-      if(!canExport())return;
-      const file=await exportContractDocument(offer.id,'pdf');
-      if(!canExport())return;
-      const envelope=JSON.parse(file.text);
-      const source=parseContractPdfSource(envelope.canonical_payload,envelope.sha256,offer.id);
-      const bytes=buildContractPdf(source,font);
-      if(!canExport())return;
-      const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
-      const link=document.createElement('a');link.href=url;link.download=`Connexy_contract_${offer.id}_v1.pdf`;link.click();
-      setTimeout(()=>URL.revokeObjectURL(url),1000);
-      setMessage('契約書PDFを生成しました。端末で保存結果を確認してください。電子署名は付与されていません。');
+      const file=await prepareContractFile(offer.id,offer.document_version??1,format,()=>active.current&&document.visibilityState!=='hidden');
+      if(!file)return;savePreparedContractFile(file);
+      setMessage(`${format==='pdf'?'契約書PDF':'確定内容のJSON'}を生成しました。端末で保存結果を確認してください。電子署名は付与されていません。`);
     });
   }
   function respond(offer: ContractOffer,action: 'confirm' | 'decline' | 'withdraw') {
@@ -140,9 +121,10 @@ export function ContractConfirmationPanel({ jobs, user, onBack }: { jobs: Job[];
       <p style={{whiteSpace:'pre-wrap',padding:12,background:'#f1f5f9'}}>追加条件：<br/>{offer.terms}</p>
       {offer.contract_details ? <dl>{(Object.keys(contractDetailLabels) as (keyof ContractDetails)[]).map(key=><div key={key} style={{marginBottom:10}}><dt><strong>{contractDetailLabels[key]}</strong></dt><dd style={{margin:0,whiteSpace:'pre-wrap'}}>{offer.contract_details![key]}</dd></div>)}</dl>
         : <p role="note">旧形式の提示：必須契約項目は未登録です。未確定の提示は取り下げて再提示してください。</p>}
-      {offer.document_version && <p>保存文書の版：{offer.document_version} ／ 確定日時：{new Date(offer.responded_at!).toLocaleString('ja-JP')}</p>}
+      {offer.document_version && <p>保存文書の版：{offer.document_version} ／ 確定日時：{new Date(offer.latest_version_confirmed_at||offer.responded_at!).toLocaleString('ja-JP')}</p>}
     </>;
   }
+  if(historyOffer)return <ContractAmendmentPanel key={historyOffer} offerId={historyOffer} companyId={user.id} onBack={()=>{setHistoryOffer(null);void run(reload);}}/>;
   return <div className="overlay-view show" style={{zIndex:1150,display:'flex',flexDirection:'column'}}>
     <header className="solid-header overlay-header"><button disabled={busy} onClick={onBack}>戻る</button><h1 style={{fontSize:18}}>契約手続き</h1></header>
     <main className="list-area bg-gray" style={{padding:20,overflowY:'auto',paddingBottom:90}}>
@@ -189,8 +171,9 @@ export function ContractConfirmationPanel({ jobs, user, onBack }: { jobs: Job[];
         {offers.map(offer=><article key={offer.id} style={{padding:16,marginBottom:16,background:'white',borderRadius:12}}>
           <strong>{labels[offer.status]}</strong>{details(offer)}
           {offer.contract_id && <p>契約番号：{offer.contract_id}</p>}
-          {offer.status==='confirmed' && offer.document_version===1 && <button disabled={busy} onClick={()=>download(offer)}>確定内容をJSON出力</button>}
-          {offer.status==='confirmed' && offer.document_version===1 && <button disabled={busy} style={{marginLeft:12}} onClick={()=>downloadPdf(offer)}>契約書PDFを出力</button>}
+          {offer.status==='confirmed' && (offer.document_version??0)>=1 && <button disabled={busy} onClick={()=>setHistoryOffer(offer.id)}>変更合意・版履歴</button>}
+          {offer.status==='confirmed' && (offer.document_version??0)>=1 && <button disabled={busy} onClick={()=>download(offer)}>確定内容をJSON出力</button>}
+          {offer.status==='confirmed' && (offer.document_version??0)>=1 && <button disabled={busy} style={{marginLeft:12}} onClick={()=>download(offer,'pdf')}>契約書PDFを出力</button>}
           {offer.status==='offered' && offer.agency_id===user.id && <>
             <button disabled={busy || !offer.contract_details || Date.parse(offer.expires_at)<=now} onClick={()=>{setReview(offer);setAgreed(false);setError('');setMessage('');}}>内容を確認して確定へ</button>
             <button disabled={busy} style={{marginLeft:12}} onClick={()=>{if(window.confirm('この提示を辞退しますか？')) respond(offer,'decline');}}>辞退する</button>

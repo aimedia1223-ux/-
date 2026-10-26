@@ -43,6 +43,11 @@ export const getStaffGender = (name: string): '男性' | '女性' => {
 };
 
 export function SearchPage() {
+  const navigate = useNavigate();
+  return legacyDemoAuth ? <LegacySearchPage /> : <PublicJobCatalog onBack={() => navigate('/')} />;
+}
+
+function LegacySearchPage() {
   const [showPublicCatalog, setShowPublicCatalog] = useState(false);
   const navigate = useNavigate();
   const mapRef = useRef<any>(null);
