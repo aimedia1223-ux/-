@@ -1,5 +1,6 @@
 import {supabase} from './supabase';
 export const auditActions:Record<string,string>={
+ 'incident.created':'インシデントを報告','incident.updated':'インシデント対応を追記','incident.read':'インシデント・緊急連絡先を取得','incident_contact.saved':'緊急連絡先・初動責任者を保存',
  'responsibility.saved':'案件責任者を保存','responsibility.deleted':'案件責任者を削除',
  'agency_manager.saved':'二次管理責任者を保存','agency_manager.deleted':'二次管理責任者を削除',
  'offer.created':'契約条件を提示','offer.confirmed':'契約条件に同意・確定','offer.declined':'契約条件を辞退','offer.withdrawn':'契約提示を取下げ','offer.deleted':'契約提示を削除',

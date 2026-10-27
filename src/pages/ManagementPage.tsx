@@ -7,6 +7,7 @@ import { ResponsibleCommunicationPanel } from '../components/ResponsibleCommunic
 import { AuditLogPanel } from '../components/AuditLogPanel';
 import { StaffCsvExport } from '../components/StaffCsvExport';
 import { DeletionRecordPanel } from '../components/DeletionRecordPanel';
+import { IncidentPanel } from '../components/IncidentPanel';
 import { requireSbApproval } from '../lib/sbApprovalGateway';
 import { loadManagementSections, managementErrorCode } from '../utils/loadManagementSections';
 import { legacyDemoAuth } from '../lib/auth';
@@ -112,7 +113,7 @@ export function ManagementPage() {
 
   // Tab/Subpage state
   const isUserAdmin = !currentUser?.staffId || currentUser.staffRole === 'admin';
-  const [subPage, setSubPage] = useState<'none' | 'posts' | 'staffs' | 'reports' | 'logs' | 'training' | 'analytics' | 'applications' | 'assigned_jobs' | 'sb_approval' | 'contract_confirmation' | 'job_responsibilities' | 'agency_managers' | 'responsible_communications' | 'audit_log' | 'deletion_records'>('none');
+  const [subPage, setSubPage] = useState<'none' | 'posts' | 'staffs' | 'reports' | 'logs' | 'training' | 'analytics' | 'applications' | 'assigned_jobs' | 'sb_approval' | 'contract_confirmation' | 'job_responsibilities' | 'agency_managers' | 'responsible_communications' | 'audit_log' | 'deletion_records' | 'incidents'>('none');
 
   // プロフィール充実度
   const profileCompletion = useMemo(() => {
@@ -1365,6 +1366,7 @@ export function ManagementPage() {
 
   // Dashboard Menu selector
   const menuItems = isUserAdmin ? [
+    ...(!legacyDemoAuth ? [{ id: 'incidents', label: 'インシデント報告', desc: '紛失・誤送信・不正アクセスの疑い、緊急連絡先・対応履歴', icon: 'report_problem', bg: '#FFF1F2', color: '#BE123C' }] : []),
     ...(!legacyDemoAuth ? [{ id: 'deletion_records', label: '削除実施記録', desc: '削除ログと返還・外部保存・バックアップ等の確認状況', icon: 'fact_check', bg: '#FFF7ED', color: '#B45309' }] : []),
     ...(!legacyDemoAuth ? [{ id: 'audit_log', label: '監査ログ', desc: '対象操作の閲覧・変更・送信・削除の記録', icon: 'history_edu', bg: '#F5F3FF', color: '#7C3AED' }] : []),
     ...(!legacyDemoAuth ? [{ id: 'responsible_communications', label: '責任者間の業務連絡', desc: '一次窓口と二次管理責任者だけの連絡', icon: 'forum', bg: '#EFF6FF', color: '#1D4ED8' }] : []),
@@ -1379,6 +1381,7 @@ export function ManagementPage() {
     { id: 'logs', label: '出勤管理', desc: '自社スタッフの出勤予定カレンダーと打刻履歴', icon: 'history', bg: '#EFF6FF', color: '#1D4ED8' },
     { id: 'analytics', label: '分析・ダッシュボード', desc: '自社の取引実績、完了率、対応履歴の可視化', icon: 'analytics', bg: '#F3E8FF', color: '#7E22CE' },
   ] : [
+    ...(!legacyDemoAuth ? [{ id: 'incidents', label: 'インシデント報告', desc: '疑いの段階で報告・自分の報告の確認', icon: 'report_problem', bg: '#FFF1F2', color: '#BE123C' }] : []),
     { id: 'assigned_jobs', label: '担当案件', desc: '自分に共有された担当案件の確認', icon: 'assignment', bg: '#FEF3C7', color: '#D97706' },
     { id: 'applications', label: '応募状況・履歴', desc: '自身が応募した案件・マッチング状態の確認・履歴', icon: 'list_alt', bg: '#E0F2FE', color: '#0284C7' },
     { id: 'training', label: '研修・クイズ', desc: '動画視聴と理解度テストの受講（準備中 / Coming Soon）', icon: 'school', bg: '#F1F5F9', color: '#94A3B8', disabled: true },
@@ -1542,6 +1545,9 @@ export function ManagementPage() {
       </div>
 
       {/* 2. Slide-In Overlays for Subpages */}
+      {currentUser && subPage === 'incidents' && !legacyDemoAuth && (
+        <IncidentPanel onBack={() => setSubPage('none')} />
+      )}
       {currentUser && isUserAdmin && subPage === 'deletion_records' && !legacyDemoAuth && (
         <DeletionRecordPanel onBack={() => setSubPage('none')} />
       )}
