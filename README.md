@@ -1,6 +1,17 @@
 # Connexy
 
-A React + TypeScript + Vite web app, using Supabase for the backend and the Google Maps JavaScript API for location features.
+A React + TypeScript + Vite web app, using Supabase for the backend. External map and address lookup features are disabled in the current review flow.
+
+## 現在の共有版（記録更新：2026-10-29）
+
+[機能・デザイン確認サイト](https://aimedia1223-ux.github.io/-/) — 架空データによる検証専用です。
+
+- インシデント報告：135番SQLを適用済み。2026-10-27に公開画面で架空の連絡先・報告の保存、対応追記、画面を開き直した後の再表示、第一報ひな形を確認しました。
+- 初回報告と対応履歴を保持します。社外への自動通知はなく、外部への連絡・証拠保全の実施は別途必要です。
+- 検証対象アカウントの追加認証は134番で一時解除中です。再開には132番を使用します。
+- 共有相手用アカウントの作成、電子署名・第三者時刻証明、支払条件の法令対応、外部保存・バックアップ等の消去確認は保留中です。
+
+詳しくは [報告機能の変更・確認記録](INCIDENT_REPORT_CHANGELOG.md) と [共有サイトの確認ガイド](REVIEW_SITE_GUIDE.md) を参照してください。
 
 ## Getting Started
 
